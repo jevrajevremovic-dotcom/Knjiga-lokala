@@ -1,0 +1,64 @@
+name: Napravi APK
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: android-actions/setup-android@v3
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.7"
+
+      # Two repository secrets hold the signing key: KEYSTORE_B64 (the .p12 file in base64) and KEYSTORE_PASSWORD.
+      - name: Pripremi ključ za potpisivanje
+        env:
+          KEYSTORE_B64: ${{ secrets.KEYSTORE_B64 }}
+          PW: ${{ secrets.KEYSTORE_PASSWORD }}
+        run: |
+          if [ -z "$KEYSTORE_B64" ] || [ -z "$PW" ]; then
+            echo "::error::Nedostaju tajne KEYSTORE_B64 i KEYSTORE_PASSWORD (Settings → Secrets and variables → Actions)."
+            exit 1
+          fi
+          mkdir -p android/keystore && cd android/keystore
+          echo "$KEYSTORE_B64" | base64 -d > knjiga-lokala.p12
+          echo "KEYSTORE_PASSWORD=$PW" >> "$GITHUB_ENV"
+          ALIAS="$(keytool -list -v -keystore knjiga-lokala.p12 -storetype pkcs12 -storepass "$PW" | grep -m1 'Alias name' | cut -d: -f2- | xargs)"
+          if [ "$ALIAS" != "knjiga" ]; then
+            keytool -changealias -alias "$ALIAS" -destalias knjiga -keystore knjiga-lokala.p12 -storetype pkcs12 -storepass "$PW"
+          fi
+
+      - name: Napravi APK
+        working-directory: android
+        run: gradle assembleRelease --no-daemon
+
+      - name: Preimenuj APK
+        run: cp android/app/build/outputs/apk/release/app-release.apk "KnjigaLokala-1.0.${{ github.run_number }}.apk"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: KnjigaLokala-apk
+          path: KnjigaLokala-*.apk
+
+      - name: Objavi kao izdanje
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.0.${{ github.run_number }}
+          name: Knjiga lokala 1.0.${{ github.run_number }}
+          body: Instalirajte APK na telefon. Nova verzija se instalira preko stare i čuva podatke.
+          files: KnjigaLokala-*.apk

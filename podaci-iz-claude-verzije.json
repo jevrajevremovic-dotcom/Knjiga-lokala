@@ -1,0 +1,18 @@
+{
+ "app": "knjiga-lokala",
+ "verzija": 1,
+ "napravljeno": "2026-10-28T10:00:00.000Z",
+ "podaci": {
+  "pazari": [
+   {"id": "mvrwnbo6ywjero", "datum": "2026-10-28", "iznos": 5000, "kreirano": 1793179285206, "lokal": 0, "napomena": ""}
+  ],
+  "troskovi": [],
+  "zadaci": [],
+  "dobavljaci": [],
+  "racuni": [],
+  "uplate": [],
+  "settings": [
+   {"id": "main", "lokali": ["Lokal 1", "Lokal 2", "Lokal 3"], "kategorije": ["Namirnice", "Piće", "Komunalije", "Gorivo", "Plate", "Kirija", "Održavanje", "Higijena", "Ostalo"]}
+  ]
+ }
+}

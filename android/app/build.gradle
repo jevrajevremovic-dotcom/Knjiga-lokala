@@ -1,0 +1,61 @@
+plugins {
+    id 'com.android.application'
+}
+
+// The web app in ../../www is copied into the APK's assets on every build.
+def webAssets = layout.buildDirectory.dir("webassets")
+tasks.register('copyWeb', Copy) {
+    from rootProject.file('../www')
+    into webAssets.map { it.dir('www') }
+    exclude 'sw.js'
+}
+
+android {
+    namespace 'rs.knjigalokala.app'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId 'rs.knjigalokala.app'
+        minSdk 24
+        targetSdk 34
+        versionCode Integer.parseInt(System.getenv('GITHUB_RUN_NUMBER') ?: '1')
+        versionName "1.0." + (System.getenv('GITHUB_RUN_NUMBER') ?: '0')
+    }
+
+    // A fixed key, so every new APK installs over the old one and keeps the data.
+    signingConfigs {
+        stalni {
+            storeFile rootProject.file('keystore/knjiga-lokala.p12')
+            storeType 'pkcs12'
+            storePassword System.getenv('KEYSTORE_PASSWORD') ?: project.findProperty('keystorePassword')
+            keyAlias 'knjiga'
+            keyPassword System.getenv('KEYSTORE_PASSWORD') ?: project.findProperty('keystorePassword')
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.stalni
+        }
+        debug {
+            signingConfig signingConfigs.stalni
+        }
+    }
+
+    sourceSets {
+        main.assets.srcDirs += webAssets
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+preBuild.dependsOn 'copyWeb'
+
+dependencies {
+    implementation 'androidx.webkit:webkit:1.11.0'
+    implementation 'androidx.core:core:1.13.1'
+}
