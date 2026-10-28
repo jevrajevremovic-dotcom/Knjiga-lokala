@@ -6,6 +6,12 @@ Android aplikacija za restoran/kafić: pazari za 3 lokala, dnevni troškovi po v
 
 Svaki `git push` na granu `main` pokreće GitHub Actions (`.github/workflows/apk.yml`). Kad se završi, gotov APK je u odeljku **Releases** repozitorijuma (i kao artifact u **Actions**).
 
+## Web verzija
+
+Izmene u `www/` se automatski objavljuju na GitHub Pages (`.github/workflows/web.yml`):
+https://jevrajevremovic-dotcom.github.io/Knjiga-lokala/
+Podaci se čuvaju samo u pregledaču na tom uređaju.
+
 ## Struktura
 
 - `www/` – sama aplikacija (HTML/JS). Može se probati i u pregledaču: `powershell -File serve.ps1`, pa otvoriti http://localhost:8080
