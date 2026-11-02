@@ -1,5 +1,5 @@
 // Offline cache for the app shell; exchange-rate requests always go to the network.
-const CACHE = "knjiga-lokala-v2";
+const CACHE = "knjiga-lokala-v3";
 const SHELL = ["./", "./index.html", "./manifest.webmanifest", "./icons/icon-192.png", "./icons/icon-512.png"];
 
 self.addEventListener("install", e => {
