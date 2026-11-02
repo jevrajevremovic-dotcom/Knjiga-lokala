@@ -1,6 +1,6 @@
 # Knjiga lokala
 
-Android aplikacija za restoran/kafić: pazari za 3 lokala, dnevni troškovi po vrsti, zadaci, računi i dug prema dobavljačima, kursna lista NBS.
+Android i web aplikacija za restoran/kafić: pazari za 3 lokala, dnevni troškovi po vrsti, gotovinski računi (isplaćeno/neisplaćeno), računi i dug prema dobavljačima, krediti i lizing (preostale rate i iznos), radnici sa avansima, imenik, zadaci i kursna lista NBS.
 
 ## Kako se pravi APK
 
