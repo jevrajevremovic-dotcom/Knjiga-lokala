@@ -275,6 +275,20 @@ details.past[open] summary::before{transform:rotate(90deg)}
 .nitem b{font-weight:500;font-size:13.5px;line-height:1.35;display:block}
 .nitem small{color:var(--dim);font-size:11.5px}
 
+/* asistent */
+.chat{display:flex;flex-direction:column;gap:12px}
+.msgs{display:flex;flex-direction:column;gap:10px;max-height:min(60vh,560px);overflow-y:auto;padding:4px 2px}
+.msg{max-width:min(620px,88%);padding:10px 13px;border-radius:14px;font-size:14px;line-height:1.5;overflow-wrap:anywhere}
+.msg.user{align-self:flex-end;background:var(--primary);color:#fff;border-bottom-right-radius:4px}
+.msg.bot{align-self:flex-start;background:var(--surface-2);border:1px solid var(--line-2);border-bottom-left-radius:4px}
+.msg.typing{color:var(--muted);font-style:italic}
+.msg .acts{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap}
+.msg .acts a{text-decoration:none}
+.msg .src{display:block;margin-top:6px;font-size:11px;color:var(--dim)}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chips .chip{cursor:pointer;color:var(--fg);padding:5px 10px;border-radius:999px}
+.chips .chip:hover{border-color:var(--primary)}
+
 /* izbor kripta i berze */
 .modal{position:fixed;inset:0;z-index:50;background:rgba(3,6,14,.65);display:grid;place-items:center;padding:16px}
 .sheet{width:min(560px,100%);max-height:min(82vh,760px);display:flex;flex-direction:column;background:var(--surface-2);border:1px solid var(--line-2);border-radius:16px;box-shadow:0 24px 60px rgba(0,0,0,.55)}
@@ -363,6 +377,7 @@ details.past[open] summary::before{transform:rotate(90deg)}
       <div class="ttl"><h1 id="title">Pregled</h1><small id="subtitle"></small></div>
       <div class="search"><svg class="i" viewBox="0 0 24 24"><path d="M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16M21 21l-4.3-4.3"/></svg>
         <input id="q" type="search" placeholder="Pretraga: kontakt, dobavljač, radnik…" autocomplete="off" aria-label="Pretraga"><div class="results" id="results" hidden></div></div>
+      <button class="iconbtn" data-tab="asistent" aria-label="Asistent" title="Asistent"><svg class="i" viewBox="0 0 24 24"><path d="M12 3l1.8 4.6L18.5 9l-4.7 1.6L12 15l-1.8-4.4L5.5 9l4.7-1.4zM19 15l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8zM5 16l.6 1.4 1.4.6-1.4.6L5 20l-.6-1.4L3 18l1.4-.6z"/></svg></button>
       <div class="bellwrap"><button class="iconbtn" id="bell" aria-label="Upozorenja"><svg class="i" viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0"/></svg><span class="dotn" id="belln" hidden></span></button>
         <div class="alerts" id="alerts" hidden></div></div>
       <button class="btn quick" id="quick"><svg class="i" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg><span id="quickl">Dodaj pazar</span></button>
@@ -485,6 +500,7 @@ const IC = {
   imenik:'<path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.7a2 2 0 0 1-.5 2.1L8 9.8a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.7.7a2 2 0 0 1 1.7 2z"/>',
   zadaci:'<path d="M4 6l2 2 4-4M4 14l2 2 4-4M13 6h7M13 14h7"/>',
   kurs:'<path d="M7 7h11l-3-3M17 17H6l3 3"/>',
+  asistent:'<path d="M12 3l1.8 4.6L18.5 9l-4.7 1.6L12 15l-1.8-4.4L5.5 9l4.7-1.4zM19 15l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8zM5 16l.6 1.4 1.4.6-1.4.6L5 20l-.6-1.4L3 18l1.4-.6z"/>',
   meni:'<path d="M4 6h16M4 12h16M4 18h16"/>',
   uplata:'<path d="M20 6L9 17l-5-5"/>',
   avans:'<path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>',
@@ -493,19 +509,20 @@ const IC = {
 const icon = (k, cls="i") => `<svg class="${cls}" viewBox="0 0 24 24">${IC[k]||""}</svg>`;
 
 /* ---------- ui state ---------- */
-const ui = { tab:"pregled", month:thisMonth(), open:{}, showDone:false, confirm:null, imq:"", alerts:false };
+const ui = { tab:"pregled", month:thisMonth(), open:{}, showDone:false, confirm:null, imq:"", alerts:false, chat:[], thinking:false };
 try{ const t=localStorage.getItem(LS+"-tab"); if(t) ui.tab=t; }catch(e){}
 const TABS = {
   pregled:["Pregled","Poslovanje na jednom mestu"], pazar:["Pazar","Dnevni pazar po lokalima"], troskovi:["Troškovi","Dnevni troškovi po vrsti"],
   gotovina:["Gotovinski računi","Šta se plaća keš i koliko treba podići iz banke"], dugovi:["Dobavljači i dugovi","Računi i uplate po firmi"],
   krediti:["Krediti i lizing","Rate, preostali broj rata i iznos"], radnici:["Radnici","Plate, prijave, odjave i avansi"],
-  imenik:["Imenik","Kontakti, telefoni i šta se od koga kupuje"], zadaci:["Zadaci","Lista obaveza"], kurs:["Kursna lista","Srednji kurs NBS"]
+  imenik:["Imenik","Kontakti, telefoni i šta se od koga kupuje"], zadaci:["Zadaci","Lista obaveza"], kurs:["Kursna lista","Srednji kurs NBS"],
+  asistent:["Asistent","Pitajte o dugovima, avansima, pazaru…"]
 };
 if (!TABS[ui.tab]) ui.tab = "pregled";
-const NAV = [["Poslovanje",["pregled","pazar","troskovi","gotovina"]],["Obaveze",["dugovi","krediti"]],["Ljudi",["radnici","imenik"]],["Ostalo",["zadaci","kurs"]]];
+const NAV = [["Poslovanje",["pregled","pazar","troskovi","gotovina"]],["Obaveze",["dugovi","krediti"]],["Ljudi",["radnici","imenik"]],["Ostalo",["asistent","zadaci","kurs"]]];
 const BOTTOM = ["pregled","pazar","troskovi","dugovi"];
 const QUICK = {pregled:["Dodaj pazar","pazar"],pazar:["Dodaj pazar"],troskovi:["Dodaj trošak"],gotovina:["Dodaj račun"],dugovi:["Dodaj dobavljača"],
-  krediti:["Dodaj kredit"],radnici:["Dodaj radnika"],imenik:["Dodaj kontakt"],zadaci:["Dodaj zadatak"],kurs:["Osveži kurs"]};
+  krediti:["Dodaj kredit"],radnici:["Dodaj radnika"],imenik:["Dodaj kontakt"],zadaci:["Dodaj zadatak"],kurs:["Osveži kurs"],asistent:["Novo pitanje"]};
 function setTab(t){ ui.tab=t; ui.confirm=null; ui.alerts=false; ui.picker=null; $("#app").classList.remove("drawer");
   try{localStorage.setItem(LS+"-tab",t);}catch(e){} render(); window.scrollTo(0,0); }
 
@@ -1096,6 +1113,216 @@ function viewKurs(){
   </div>`;
 }
 
+/* ---------- asistent ----------
+   Built-in: understands common Serbian questions about the book (debts, advances, takings, costs, cash, loans,
+   contacts) by keywords and fuzzy name matching, offline. Optional: anything it cannot answer goes to Claude
+   with the user's own API key, kept only on this device (never in backups). */
+const norm = s => String(s||"").toLowerCase().replace(/đ/g,"dj").normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/[^a-z0-9\s]/g," ").replace(/\s+/g," ").trim();
+const NAME_STOP = new Set(["doo","d","o","ad","str","szr","firma","i","the"]);
+// Share of the name's words found in the question; Serbian case endings are tolerated by comparing word stems.
+function nameScore(qWords, name){
+  const nw = norm(name).split(" ").filter(w=>w.length>=3 && !NAME_STOP.has(w)); if (!nw.length) return 0;
+  let hit = 0;
+  nw.forEach(w=>{ const stem = w.length>5 ? w.slice(0,w.length-2) : w.slice(0,Math.max(3,w.length-1));
+    if (qWords.some(x=>x.startsWith(stem) || (x.length>=4 && w.startsWith(x)))) hit++; });
+  return hit ? hit/nw.length + hit*0.01 : 0;
+}
+function findEntity(qWords){
+  const s = settings(), cands = [
+    ...state.dobavljaci.map(d=>({type:"dob", obj:d, name:d.naziv})),
+    ...state.radnici.map(r=>({type:"rad", obj:r, name:r.ime})),
+    ...state.imenik.map(c=>({type:"kon", obj:c, name:c.ime})),
+    ...loans().map(o=>({type:"kred", obj:o, name:o.naziv+" "+(o.namena||"")})),
+    ...s.lokali.map((n,i)=>({type:"lok", obj:i, name:n})),
+    ...s.kategorije.map(k=>({type:"kat", obj:k, name:k}))
+  ];
+  // People, firms and loans win over lokali/categories, whose names are often ordinary words ("Ostalo", "Piće").
+  let best = null;
+  cands.forEach(c=>{ const sc = nameScore(qWords, c.name) + (c.type==="lok"||c.type==="kat" ? 0 : 10);
+    if (sc%10>=0.34 && (!best || sc>best.sc)) best = {...c, sc}; });
+  return best;
+}
+const MONTHS_LOC = ["januaru","februaru","martu","aprilu","maju","junu","julu","avgustu","septembru","oktobru","novembru","decembru"];
+const MONTH_FORMS = MONTHS.map(m=>{ const b = m.length>4 ? m.slice(0,5) : m; return m.length>4 ? (w=>w.startsWith(b)) : (w=>w===m || w===m+"a" || w===m+"u"); });
+function parsePeriod(W){
+  const t = today(), has = (...x) => x.some(s=>W.some(w=>w.startsWith(s))), m = thisMonth();
+  const monthRange = mm => ({from:mm+"-01", to:mm+"-"+pad(daysIn(mm))});
+  if (has("prekjuc")){ const d=addDays(t,-2); return {from:d,to:d,label:"prekjuče"}; }
+  if (has("juc")){ const d=addDays(t,-1); return {from:d,to:d,label:"juče"}; }
+  if (has("danas","danasnj")) return {from:t,to:t,label:"danas"};
+  if (has("nedelj","sedmic")){ const dow=(new Date(t+"T12:00:00").getDay()+6)%7, mon=addDays(t,-dow);
+    return has("prosl","prethodn") ? {from:addDays(mon,-7),to:addDays(mon,-1),label:"prošle nedelje"} : {from:mon,to:t,label:"ove nedelje"}; }
+  if (has("godin")){ const y=+t.slice(0,4)-(has("prosl","prethodn")?1:0); return {from:y+"-01-01",to:y+"-12-31",label:has("prosl","prethodn")?"prošle godine":"ove godine"}; }
+  const yw = W.find(w=>/^20\d\d$/.test(w)), mi = MONTH_FORMS.findIndex(f=>W.some(f));
+  if (mi>=0){ let y = yw ? +yw : +t.slice(0,4); if (!yw && mi+1 > +t.slice(5,7)) y--; const mm = y+"-"+pad(mi+1); return {...monthRange(mm), label:"u "+MONTHS_LOC[mi]+" "+y}; }
+  if (has("prosl","prethodn")){ const pm=prevMonth(m); return {...monthRange(pm), label:"prošlog meseca"}; }
+  return {...monthRange(m), label:"ovog meseca", def:true};
+}
+const inP = (x,p) => x.datum && x.datum>=p.from && x.datum<=p.to;
+const M = v => `<b>${fmt(v)} RSD</b>`;
+const goBtn = (tab, label, id) => `<button class="btn ghost small" data-goto="${tab}${id?":"+id:""}">${label}</button>`;
+
+function answerLocal(q){
+  const W = norm(q).split(" ").filter(Boolean); if (!W.length) return null;
+  const has = (...x) => x.some(s=>W.some(w=>w.startsWith(s)));
+  const P = parsePeriod(W), E = findEntity(W), t = today(), s = settings();
+
+  // kurs i preračun: "koliko je 100 evra u dinarima"
+  const CUR = [["eur",["evr","eur"]],["usd",["dolar","usd"]],["chf",["frank","chf"]],["gbp",["funt","gbp"]],["bam",["mark","bam"]]];
+  const cur = CUR.find(([,st])=>has(...st));
+  if (has("kurs") || (cur && W.some(w=>/^\d/.test(w)))){
+    const n = parseNum((q.match(/\d[\d.,]*/)||[])[0]); const code = cur ? cur[0].toUpperCase() : "EUR";
+    if (!isNaN(n) && rate(code)) return `${fmt(n)} ${code} = ${M(toRSD(n,code))} po srednjem kursu NBS${s.kursDatum?" od "+fdate(s.kursDatum):"."}`;
+    return `Srednji kurs NBS${s.kursDatum?" ("+fdate(s.kursDatum)+")":""}: ${["EUR","USD","CHF","GBP"].map(c=>`${c} <b>${s.kurs[c]?fmt(parseNum(s.kurs[c]),4):"—"}</b>`).join(" · ")}.`;
+  }
+  if (E && E.type==="dob"){
+    const d = E.obj, x = supplierDebt(d.id), late = x.racuni.filter(r=>r.dospece && r.dospece<t);
+    const lastU = [...x.uplate].sort((a,b)=>(b.datum||"").localeCompare(a.datum||""))[0];
+    return (x.rsd<=0.5 ? `Prema <b>${esc(d.naziv)}</b> nema duga, sve je plaćeno.` : `Dug prema <b>${esc(d.naziv)}</b> je ${M(x.rsd)}${Object.keys(x.byCur).some(c=>c!=="RSD")?` (${esc(curList(x.byCur))})`:""}.`)
+      + `<br>Računa: ${x.racuni.length}, ukupno ${fmt(sum(x.racuni,r=>toRSD(r.iznos,r.valuta)))} RSD; uplaćeno ${fmt(sum(x.uplate,u=>toRSD(u.iznos,u.valuta)))} RSD.`
+      + (x.rsd>0.5 && late.length ? `<br><span class="neg">${late.length} račun(a) je posle roka plaćanja.</span>` : "")
+      + (lastU ? `<br>Poslednja uplata: ${fdate(lastU.datum)}, ${fmt(lastU.iznos)} ${esc(lastU.valuta||"RSD")}.` : "")
+      + `<div class="acts">${goBtn("dugovi","Otvori dobavljača",d.id)}</div>`;
+  }
+  if (E && E.type==="rad"){
+    const r = E.obj, mm = P.def ? thisMonth() : P.from.slice(0,7), list = state.avansi.filter(a=>a.radnik===r.id);
+    const inPer = list.filter(a=>inP(a,P)), avM = avansiMonth(r.id, mm);
+    return `<b>${esc(r.ime)}</b>${r.mesto?` (${esc(r.mesto)})`:""} je ${P.label} uzeo ${M(sum(inPer,a=>a.iznos))} avansa${inPer.length?` (${inPer.length} put${inPer.length===1?"":"a"})`:""}.`
+      + `<br>Plata: ${M(r.plata)}; posle avansa za ${MONTHS[+mm.slice(5)-1]} ostaje ${M((Number(r.plata)||0)-avM)} za isplatu.`
+      + (list.length ? `<br>Svi avansi ukupno: ${fmt(sum(list,a=>a.iznos))} RSD.` : "")
+      + (r.odjava ? `<br>Odjava: ${fdate(r.odjava)}.` : "")
+      + `<div class="acts">${goBtn("radnici","Otvori radnika",r.id)}</div>`;
+  }
+  if (E && E.type==="kred"){
+    const o = E.obj, v = esc(o.valuta||"RSD");
+    return `<b>${esc(o.naziv)}</b> (${o._t==="krediti"?"kredit":"lizing"}${o.namena?", "+esc(o.namena):""}): ostalo je <b>${o.p.n} rata</b> po ${fmt(o.rata)} ${v}, ukupno <b>${fmt(o.p.ostalo)} ${v}</b>${o.valuta&&o.valuta!=="RSD"?` (≈ ${fmt0(o.p.ostaloRSD)} RSD)`:""}.`
+      + (o.p.next ? `<br>Sledeća rata: ${fdate(o.p.next)}. Ističe ${fdate(o.istek)}.` : `<br>Otplaćeno.`) + `<div class="acts">${goBtn("krediti","Krediti i lizing")}</div>`;
+  }
+  if (E && E.type==="kon"){
+    const c = E.obj, tel = String(c.tel).replace(/[^\d+]/g,"");
+    return `<b>${esc(c.ime)}</b>: <b class="num">${esc(c.tel)}</b>${c.napomena?`<br>${esc(c.napomena)}`:""}<div class="acts"><a class="btn small" href="tel:${esc(tel)}">Pozovi</a></div>`;
+  }
+  if (has("gotovin","kes","kesh","podic","izvuc","banke","banci")){
+    const open = state.gotovina.filter(g=>g.status!=="isplaceno");
+    return open.length ? `Za gotovinske račune treba podići ${M(sum(open,g=>g.iznos))} (${open.length} neisplaćen${open.length===1?"":"ih"}):<br>${open.slice(0,6).map(g=>`· ${esc(g.primalac)}: ${fmt(g.iznos)} RSD`).join("<br>")}<div class="acts">${goBtn("gotovina","Gotovinski računi")}</div>`
+      : `Nema neisplaćenih gotovinskih računa, ne treba ništa podizati iz banke.`;
+  }
+  if (has("kredit","lizing","rata","rate","rat")){
+    const L = loans().filter(o=>o.p.next);
+    return L.length ? `Preostale obaveze (ukupno ≈ ${M(sum(L,o=>o.p.ostaloRSD))}):<br>${L.map(o=>`· ${esc(o.naziv)}: ${o.p.n} rata, ${fmt(o.p.ostalo)} ${esc(o.valuta||"RSD")}, sledeća ${fdate(o.p.next)}`).join("<br>")}<div class="acts">${goBtn("krediti","Krediti i lizing")}</div>`
+      : `Nema aktivnih kredita ni lizinga.`;
+  }
+  if (has("zarad","profit","razlik","dobit","zaradj")){
+    const p = sum(state.pazari.filter(x=>inP(x,P)),x=>x.iznos), c = sum(state.troskovi.filter(x=>inP(x,P)),x=>x.iznos);
+    return `${P.label[0].toUpperCase()+P.label.slice(1)}: pazar ${M(p)}, troškovi ${M(c)}, razlika <b class="${p-c>=0?"pos":"neg"}">${fmt(p-c)} RSD</b>.`;
+  }
+  if (has("pazar","promet","naplat","utrz")){
+    const rows = state.pazari.filter(x=>inP(x,P) && (!E || E.type!=="lok" || x.lokal===E.obj));
+    const by = s.lokali.map((n,i)=>sum(rows.filter(x=>x.lokal===i),x=>x.iznos)), days = new Set(rows.map(x=>x.datum)).size, tot = sum(rows,x=>x.iznos);
+    return `Pazar ${E&&E.type==="lok"?`u lokalu <b>${esc(s.lokali[E.obj])}</b> `:""}${P.label}: ${M(tot)}.`
+      + (!(E&&E.type==="lok") && tot ? `<br>${s.lokali.map((n,i)=>`${esc(n)}: ${fmt(by[i])}`).join(" · ")}` : "")
+      + (days>1 ? `<br>${days} dana sa unosom, prosečno ${fmt(tot/days)} RSD dnevno.` : "");
+  }
+  if (has("trosk","potros","trosi","izdat","rashod") || (E && E.type==="kat")){
+    const rows = state.troskovi.filter(x=>inP(x,P) && (!E || E.type!=="kat" || x.kategorija===E.obj)), tot = sum(rows,x=>x.iznos);
+    const by = {}; rows.forEach(x=>by[x.kategorija]=(by[x.kategorija]||0)+(Number(x.iznos)||0));
+    return `Troškovi ${E&&E.type==="kat"?`za <b>${esc(E.obj)}</b> `:""}${P.label}: ${M(tot)}.`
+      + (!(E&&E.type==="kat") && tot ? `<br>${Object.entries(by).sort((a,b)=>b[1]-a[1]).slice(0,5).map(([k,v])=>`${esc(k)}: ${fmt(v)}`).join(" · ")}` : "");
+  }
+  if (has("avans","plat","radnik","radnic","zaposlen")){
+    const act = state.radnici.filter(isActive), mm = P.def ? thisMonth() : P.from.slice(0,7);
+    const who = act.map(r=>({r, a:avansiMonth(r.id,mm)})).filter(x=>x.a>0);
+    return `Prijavljenih radnika: <b>${act.length}</b>, plate ukupno ${M(sum(act,r=>r.plata))}.<br>Avansi za ${MONTHS[+mm.slice(5)-1]}: ${M(sum(who,x=>x.a))}${who.length?":<br>"+who.map(x=>`· ${esc(x.r.ime)}: ${fmt(x.a)} RSD`).join("<br>"):"."}`;
+  }
+  if (has("dug","duguj","duzn","dobavlj")){
+    const list = state.dobavljaci.map(d=>({d,x:supplierDebt(d.id)})).filter(o=>o.x.rsd>0.5).sort((a,b)=>b.x.rsd-a.x.rsd);
+    return list.length ? `Ukupan dug prema dobavljačima je ${M(sum(list,o=>o.x.rsd))}:<br>${list.slice(0,6).map(o=>`· ${esc(o.d.naziv)}: ${fmt(o.x.rsd)} RSD`).join("<br>")}<div class="acts">${goBtn("dugovi","Dobavljači i dugovi")}</div>`
+      : `Nema duga prema dobavljačima.`;
+  }
+  if (has("zadat","obavez","uradit","podsetn")){
+    const open = state.zadaci.filter(z=>!z.gotovo);
+    return open.length ? `Otvoreni zadaci (${open.length}):<br>${open.slice(0,8).map(z=>`· ${esc(z.tekst)}${z.rok?` (rok ${fdate(z.rok)})`:""}`).join("<br>")}` : `Nema otvorenih zadataka.`;
+  }
+  return null;
+}
+
+/* Claude (optional) */
+const AI_LS = LS+"-ai";
+const aiKey = () => { try{ return localStorage.getItem(AI_LS)||""; }catch(e){ return ""; } };
+const SDK_URL = "https://cdn.jsdelivr.net/npm/@anthropic-ai/sdk@0.135.0/+esm";
+let sdkMod = null;
+function aiSnapshot(){
+  const s = settings(), since = addDays(today(), -120), byMonth = arr => { const o={}; arr.forEach(x=>{ if(x.datum){ const k=x.datum.slice(0,7); o[k]=(o[k]||0)+(Number(x.iznos)||0); } }); return o; };
+  return {
+    danas: today(), valuta: "RSD", lokali: s.lokali, kursNBS: {datum:s.kursDatum, ...s.kurs},
+    dobavljaci: state.dobavljaci.map(d=>{ const x=supplierDebt(d.id); return {naziv:d.naziv, dugRSD:Math.round(x.rsd*100)/100, poValutama:x.byCur,
+      racuni:x.racuni.map(r=>({datum:r.datum,broj:r.broj,iznos:r.iznos,valuta:r.valuta,rok:r.dospece})), uplate:x.uplate.map(u=>({datum:u.datum,iznos:u.iznos,valuta:u.valuta,napomena:u.napomena}))}; }),
+    radnici: state.radnici.map(r=>({ime:r.ime, mesto:r.mesto, plata:r.plata, prijava:r.prijava, odjava:r.odjava, prijavljen:isActive(r),
+      avansi:state.avansi.filter(a=>a.radnik===r.id).map(a=>({datum:a.datum,iznos:a.iznos,napomena:a.napomena}))})),
+    pazarPoMesecima: byMonth(state.pazari), troskoviPoMesecima: byMonth(state.troskovi),
+    pazari120dana: state.pazari.filter(p=>p.datum>=since).map(p=>({datum:p.datum, lokal:s.lokali[p.lokal], iznos:p.iznos})),
+    troskovi120dana: state.troskovi.filter(p=>p.datum>=since).map(p=>({datum:p.datum, vrsta:p.kategorija, iznos:p.iznos, opis:p.opis, lokal:p.lokal===""||p.lokal==null?"zajedničko":s.lokali[p.lokal]})),
+    gotovinskiRacuni: state.gotovina.map(g=>({datum:g.datum, kome:g.primalac, iznos:g.iznos, status:g.status==="isplaceno"?"isplaćeno":"neisplaćeno", napomena:g.napomena})),
+    kreditiILizing: loans().map(o=>({vrsta:o._t==="krediti"?"kredit":"lizing", naziv:o.naziv, namena:o.namena, iznos:o.iznos, rata:o.rata, valuta:o.valuta, danPlacanja:o.dan, istek:o.istek, preostaloRata:o.p.n, preostaliIznos:o.p.ostalo, sledecaRata:o.p.next})),
+    imenik: state.imenik.map(c=>({ime:c.ime, telefon:c.tel, napomena:c.napomena})),
+    otvoreniZadaci: state.zadaci.filter(z=>!z.gotovo).map(z=>({tekst:z.tekst, rok:z.rok}))
+  };
+}
+async function askClaude(){
+  if (!sdkMod) sdkMod = await import(SDK_URL);
+  const Anthropic = sdkMod.default;
+  const client = new Anthropic({apiKey: aiKey(), dangerouslyAllowBrowser: true});
+  const messages = ui.chat.slice(-10).map(m=>({role: m.role==="user"?"user":"assistant", content: m.text}));
+  while (messages.length && messages[0].role!=="user") messages.shift();
+  try{
+    const resp = await client.beta.messages.create({
+      model: "claude-opus-5-5", max_tokens: 16000,
+      betas: ["server-side-fallback-2026-07-01"], fallbacks: "default",
+      output_config: {effort: "low"},
+      system: "Ti si asistent u aplikaciji Knjiga lokala za vlasnika restorana/kafića. Odgovaraj kratko, na srpskom latinicom, isključivo na osnovu podataka ispod. "
+        + "Iznose piši u dinarima sa tačkom za hiljade i zarezom za decimale (npr. 12.500,00 RSD). Ako podatak ne postoji, reci to; ne izmišljaj.\n\nPodaci (JSON):\n" + JSON.stringify(aiSnapshot()),
+      messages
+    });
+    if (resp.stop_reason === "refusal") return "Na ovo pitanje ne mogu da odgovorim.";
+    return resp.content.filter(b=>b.type==="text").map(b=>b.text).join("\n").trim() || "Nisam dobio odgovor. Pokušajte ponovo.";
+  }catch(err){
+    if (err instanceof Anthropic.AuthenticationError) return "API ključ nije ispravan. Proverite ga u podešavanjima asistenta.";
+    if (err instanceof Anthropic.RateLimitError) return "Previše pitanja u kratkom roku. Sačekajte malo pa pokušajte ponovo.";
+    if (err instanceof Anthropic.APIConnectionError) return "Nema veze sa internetom.";
+    if (err instanceof Anthropic.APIError) return "Claude trenutno ne odgovara ("+(err.status||"greška")+"). Pokušajte kasnije.";
+    throw err;
+  }
+}
+const mdLite = s => esc(s).replace(/\*\*(.+?)\*\*/g,"<b>$1</b>").replace(/\n/g,"<br>");
+const plain = h => { const d=document.createElement("div"); d.innerHTML=h.replace(/<br>/g,"\n"); d.querySelectorAll(".acts").forEach(x=>x.remove()); return d.textContent.trim(); };
+async function ask(q){
+  q = q.trim(); if (!q || ui.thinking) return;
+  ui.chat.push({role:"user", html:esc(q), text:q});
+  const local = answerLocal(q);
+  if (local){ ui.chat.push({role:"bot", html:local, text:plain(local)}); render(); return; }
+  if (!aiKey()){
+    const h = `Nisam razumeo pitanje. Probajte ovako:<br>· Koliko dugujemo Coca-Coli?<br>· Koliko je avansa uzeo Marko?<br>· Koliki je pazar prošlog meseca?<br>· Koliko treba podići iz banke?<br>· Koji je broj od mesare?<br><small class="mut">Za složenija pitanja uključite Claude ispod.</small>`;
+    ui.chat.push({role:"bot", html:h, text:plain(h)}); render(); return;
+  }
+  ui.thinking = true; render();
+  let txt; try{ txt = await askClaude(); }catch(e){ txt = "Claude nije dostupan. Proverite internet."; }
+  ui.thinking = false; ui.chat.push({role:"bot", html:mdLite(txt), text:txt, src:"Claude"}); render();
+}
+function viewAsistent(){
+  const d = state.dobavljaci[0], r = state.radnici.find(isActive), key = aiKey();
+  const chips = [d&&`Koliko dugujemo ${d.naziv}?`, r&&`Koliko avansa je uzeo ${r.ime.split(" ")[0]}?`, "Koliki je pazar danas?", "Troškovi prošlog meseca", "Koliko treba podići iz banke?", "Koliko je ostalo rata?"].filter(Boolean);
+  return `<section class="panel chat">
+    <div class="msgs" id="msgs">${ui.chat.length ? ui.chat.map(m=>`<div class="msg ${m.role}">${m.html}${m.src?`<small class="src">${m.src}</small>`:""}</div>`).join("") : `<div class="msg bot">Zdravo! Pitajte me nešto o poslovanju, na primer koliko dugujete nekom dobavljaču, koliko je avansa uzeo radnik ili koliki je pazar.</div>`}
+      ${ui.thinking?`<div class="msg bot typing">Razmišljam…</div>`:""}</div>
+    <form class="addrow" id="f-ask" style="margin-top:0"><input id="ask-q" placeholder="Pitajte nešto…" autocomplete="off" aria-label="Pitanje"><button class="btn" type="submit" ${ui.thinking?"disabled":""}>Pošalji</button></form>
+    <div class="chips">${chips.map(c=>`<button class="chip" data-ask="${esc(c)}">${esc(c)}</button>`).join("")}</div>
+    ${ui.chat.length?`<button class="link" data-chatclear style="align-self:flex-start">Obriši razgovor</button>`:""}
+  </section>
+  ${panel("Claude za složenija pitanja", `<p class="note" style="margin-top:0">Ugrađeni asistent radi bez interneta i bez troška. Ako unesete svoj Anthropic API ključ, pitanja koja on ne razume šalju se Claudeu zajedno sa podacima iz knjige; plaćate prema svom nalogu na console.anthropic.com. Ključ se čuva samo na ovom uređaju i ne ulazi u rezervnu kopiju.</p>
+    ${key ? `<div class="toolbar"><span class="pill c-green">Claude uključen · ključ …${esc(key.slice(-4))}</span>${ui.confirm==="aikey"?`<span class="confirm">Ukloniti ključ? <button class="btn danger small" data-aikeydel>Da</button><button class="btn ghost small" data-cancel>Ne</button></span>`:`<button class="btn danger small" data-askdel="aikey">Ukloni ključ</button>`}</div>`
+      : `<form class="addrow" id="f-aikey"><input id="ai-key" type="password" placeholder="sk-ant-…" autocomplete="off" aria-label="Anthropic API ključ"><button class="btn" type="submit">Sačuvaj ključ</button></form>`}`)}`;
+}
+
 /* ---------- chrome: navigation, alerts, search ---------- */
 function renderChrome(){
   const t=today();
@@ -1133,12 +1360,13 @@ function renderResults(){
 function render(){
   gid = 0; renderChrome();
   const ae = document.activeElement; const focusId = ae && ae.id; const selStart = ae && ae.selectionStart;
-  const views = {pregled:viewPregled,pazar:viewPazar,troskovi:viewTroskovi,gotovina:viewGotovina,dugovi:viewDugovi,krediti:viewKrediti,radnici:viewRadnici,imenik:viewImenik,zadaci:viewZadaci,kurs:viewKurs};
+  const views = {pregled:viewPregled,pazar:viewPazar,troskovi:viewTroskovi,gotovina:viewGotovina,dugovi:viewDugovi,krediti:viewKrediti,radnici:viewRadnici,imenik:viewImenik,zadaci:viewZadaci,kurs:viewKurs,asistent:viewAsistent};
   // keep in-progress form text across re-renders (edit forms of workers are refilled from data instead)
   const keep = {}; document.querySelectorAll("#main input:not([type=checkbox]),#main select").forEach(el=>{ if(el.id && el.dataset.fx===undefined && !el.id.startsWith("re-") && !el.dataset.gstatus) keep[el.id]=el.value; });
   const pkScroll = $("#pk-body") ? $("#pk-body").scrollTop : 0;
   $("#main").innerHTML = views[ui.tab]() + (ui.picker ? pickerView() : "");
   if ($("#pk-body")) $("#pk-body").scrollTop = pkScroll;
+  const msgs = $("#msgs"); if (msgs) msgs.scrollTop = msgs.scrollHeight;
   Object.entries(keep).forEach(([id,v])=>{ const el=document.getElementById(id); if(el && id!=="month" && id!=="im-q") el.value=v; });
   if (focusId && $("#main").querySelector("#"+CSS.escape(focusId))){ const el=document.getElementById(focusId); el.focus(); try{ if(selStart!=null) el.setSelectionRange(selStart,selStart);}catch(e){} }
   calc();
@@ -1170,6 +1398,10 @@ document.addEventListener("click", e=>{
   if (b.hasAttribute("data-showdone")){ ui.showDone=!ui.showDone; render(); return; }
   if (b.hasAttribute("data-export")){ exportBackup(); return; }
   if (b.hasAttribute("data-fxrefresh")){ refreshRates(true); return; }
+  if (b.dataset.ask){ ask(b.dataset.ask); return; }
+  if (b.dataset.goto){ const [tab,id]=b.dataset.goto.split(":"); if (id) ui.open[id]=true; setTab(tab); return; }
+  if (b.hasAttribute("data-chatclear")){ ui.chat=[]; render(); return; }
+  if (b.hasAttribute("data-aikeydel")){ try{ localStorage.removeItem(AI_LS); }catch(e){} ui.confirm=null; render(); toast("Ključ uklonjen"); return; }
   if (b.dataset.picker){ ui.picker=b.dataset.picker; ui.pkq=""; render(); if (ui.picker==="kripto") loadCoinList(); else if (Date.now()-info.feedAt > 2*60e3){ info.feedAt=0; refreshInfo(false); } return; }
   if (b.hasAttribute("data-pickdone")){ closePicker(); return; }
   if (b.hasAttribute("data-inforefresh")){ refreshInfo(true); refreshRates(true); return; }
@@ -1252,6 +1484,9 @@ document.addEventListener("submit", async e=>{
   else if (f.id==="f-kon"){
     await put("imenik",uid(),{ime:val("k-ime"),tel:val("k-tel"),napomena:val("k-nap"),kreirano:Date.now()});
     clear("k-ime","k-tel","k-nap"); toast("Kontakt dodat"); render(); }
+  else if (f.id==="f-ask"){ const q=val("ask-q"); clear("ask-q"); await ask(q); $("#ask-q")?.focus(); }
+  else if (f.id==="f-aikey"){ const k=val("ai-key"); if (!/^sk-ant-/.test(k)){ toast("Ključ počinje sa sk-ant-"); return; }
+    try{ localStorage.setItem(AI_LS,k); }catch(e){ toast("Ključ nije sačuvan."); return; } clear("ai-key"); render(); toast("Claude uključen"); }
   else if (f.id==="f-grad"){ const q=val("grad-ime"); if(!q) return;
     try{ const j=await getJSON("https://geocoding-api.open-meteo.com/v1/search?count=1&language=sr&name="+encodeURIComponent(q)); const r=j.results&&j.results[0];
       if (!r){ toast("Grad nije pronađen"); return; }

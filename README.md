@@ -19,6 +19,12 @@ Podaci se čuvaju samo u pregledaču na tom uređaju.
   (`.github/workflows/info.yml`) u `info.json` na grani `info`; aplikacija ga čita sa raw.githubusercontent.com.
   GitHub gasi zakazane poslove posle 60 dana bez izmena u repozitorijumu – tada ga ponovo uključite u Actions.
 
+## Asistent
+
+Ugrađeni asistent odgovara na pitanja o knjizi (dug prema dobavljaču, avansi radnika, pazar, troškovi, gotovina,
+krediti, kontakti) bez interneta. Opciono, sa sopstvenim Anthropic API ključem (čuva se samo na uređaju, ne ulazi u
+kopiju), pitanja koja ne razume šalju se Claudeu zajedno sa sažetkom podataka iz knjige.
+
 ## Struktura
 
 - `www/` – sama aplikacija (HTML/JS). Može se probati i u pregledaču: `powershell -File serve.ps1`, pa otvoriti http://localhost:8080
