@@ -246,7 +246,10 @@ details.past[open] summary::before{transform:rotate(90deg)}
 .calc .out{grid-column:1/-1;font-size:16px;font-weight:600}
 .note{font-size:12.5px;color:var(--muted);margin:10px 0 0}
 
-/* info: vreme, kurs, berza, kripto, vesti */
+/* info: vreme, kurs, berza, kripto, vesti (on a phone everything but the weather moves to the end of Pregled) */
+.mob-only{display:none}
+.info > .desk-only{display:flex;min-width:0}
+.info > .desk-only > .icard{flex:1}
 .info{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,.9fr) minmax(0,1.2fr) minmax(0,1.2fr);gap:16px}
 .icard{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:16px;min-width:0;display:flex;flex-direction:column;gap:10px}
 .icard .hd{display:flex;justify-content:space-between;align-items:center;gap:8px}
@@ -362,6 +365,8 @@ details.past[open] summary::before{transform:rotate(90deg)}
   .ttl small{display:none}
   .lokali{grid-template-columns:minmax(0,1fr)}
   .info,.news{grid-template-columns:minmax(0,1fr)}
+  .desk-only{display:none!important}
+  .mob-only{display:flex!important}
   .modal{place-items:end stretch;padding:0}
   .sheet{width:100%;max-height:88vh;border-radius:16px 16px 0 0;padding-bottom:env(safe-area-inset-bottom,0px)}
   .kpis,.stats{gap:10px}
@@ -954,7 +959,7 @@ function viewPregled(){
   const openT = state.zadaci.filter(z=>!z.gotovo);
   return `
   ${backupBanner()}${dueBanner()}
-  <div class="info">${wxCard()}${kursCard()}${berzaCard()}${kriptoCard()}</div>
+  <div class="info">${wxCard()}<div class="desk-only">${kursCard()}</div><div class="desk-only">${berzaCard()}</div><div class="desk-only">${kriptoCard()}</div></div>
   <div class="toolbar" style="justify-content:space-between">${monthBar()}<span class="label">Danas: ${fdate(t)}</span></div>
   <div class="kpis">
     <div class="kc"><div class="top"><span class="t">Pazar · ${MONTHS[+m.slice(5)-1]}</span>${pct(mp,pp)}</div><div class="v num">${fmt0(mp)}<small>RSD</small></div><div class="h">Danas: ${fmt0(todayP)} RSD</div>${spark(pd,"#60A5FA")}</div>
@@ -976,7 +981,7 @@ function viewPregled(){
     <div class="st c-blue"><span class="ic">${icon("radnici")}</span><div><b class="num">${fmt0(plate)}</b><span>Plate · ${act.length} radnik(a)</span></div></div>
     <div class="st c-orange"><span class="ic">${icon("zadaci")}</span><div><b class="num">${openT.length}</b><span>Otvorenih zadataka</span></div></div>
   </div>
-  ${newsPanel()}
+  <div class="desk-only">${newsPanel()}</div>
   ${panel("Dobavljači", table(["Dobavljač","Otvoreni računi","Najbliži rok","Status",">Dug"], supp.map(({d,x})=>{
       const ist = invoiceState(d.id), open = x.racuni.filter(r=>ist[r.id].left>0.5), roks = open.map(r=>r.dospece).filter(Boolean).sort();
       const st = x.rsd<=0.5 ? INV_PILL.placeno : open.some(r=>ist[r.id].st==="kasni") ? INV_PILL.kasni : INV_PILL.otvoreno;
@@ -987,7 +992,8 @@ function viewPregled(){
   <div class="grid2">
     ${panel("Troškovi po vrsti", catsBlock(by), `<span class="sub num">${fmt(mc)} RSD</span>`)}
     ${panel("Otvoreni zadaci", (openT.length?openT.slice(0,6).map(taskRow).join(""):`<div class="empty">Sve je završeno.</div>`), `<button class="link" data-tab="zadaci">Svi zadaci</button>`)}
-  </div>`;
+  </div>
+  <div class="mob-only stack">${kursCard()}${berzaCard()}${kriptoCard()}${newsPanel()}</div>`;
 }
 
 function viewPazar(){
