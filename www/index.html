@@ -275,6 +275,22 @@ details.past[open] summary::before{transform:rotate(90deg)}
 .nitem b{font-weight:500;font-size:13.5px;line-height:1.35;display:block}
 .nitem small{color:var(--dim);font-size:11.5px}
 
+/* izbor kripta i berze */
+.modal{position:fixed;inset:0;z-index:50;background:rgba(3,6,14,.65);display:grid;place-items:center;padding:16px}
+.sheet{width:min(560px,100%);max-height:min(82vh,760px);display:flex;flex-direction:column;background:var(--surface-2);border:1px solid var(--line-2);border-radius:16px;box-shadow:0 24px 60px rgba(0,0,0,.55)}
+.sh-head{padding:16px 16px 12px;border-bottom:1px solid var(--line);display:flex;flex-direction:column;gap:10px}
+.sh-head h2{font-size:16px}
+.sh-head p{margin:0;font-size:12.5px;color:var(--muted)}
+.sh-body{overflow:auto;padding:4px 16px 8px;overscroll-behavior:contain}
+.sh-foot{padding:12px 16px;border-top:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:13px;color:var(--muted)}
+.pgrp{font-size:11.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--dim);font-weight:600;padding:12px 0 4px}
+.pick{display:flex;align-items:center;gap:11px;padding:8px 2px;border-bottom:1px solid var(--line);cursor:pointer}
+.pick:last-child{border-bottom:0}
+.pick input{width:18px;height:18px;accent-color:var(--primary);flex:none}
+.pick span{flex:1;min-width:0}
+.pick small{display:block;color:var(--dim);font-size:11.5px}
+.pick em{font-style:normal;font-size:12.5px;text-align:right}
+
 .backup{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
 .backup p{flex-basis:100%;margin:0 0 4px;color:var(--muted);font-size:13.5px}
 
@@ -311,6 +327,8 @@ details.past[open] summary::before{transform:rotate(90deg)}
   .ttl small{display:none}
   .lokali{grid-template-columns:minmax(0,1fr)}
   .info,.news{grid-template-columns:minmax(0,1fr)}
+  .modal{place-items:end stretch;padding:0}
+  .sheet{width:100%;max-height:88vh;border-radius:16px 16px 0 0;padding-bottom:env(safe-area-inset-bottom,0px)}
   .kpis,.stats{gap:10px}
   .kc{padding:12px 12px 0;min-height:118px}
   .kc .v{font-size:19px;white-space:normal;overflow-wrap:anywhere}
@@ -488,7 +506,7 @@ const NAV = [["Poslovanje",["pregled","pazar","troskovi","gotovina"]],["Obaveze"
 const BOTTOM = ["pregled","pazar","troskovi","dugovi"];
 const QUICK = {pregled:["Dodaj pazar","pazar"],pazar:["Dodaj pazar"],troskovi:["Dodaj trošak"],gotovina:["Dodaj račun"],dugovi:["Dodaj dobavljača"],
   krediti:["Dodaj kredit"],radnici:["Dodaj radnika"],imenik:["Dodaj kontakt"],zadaci:["Dodaj zadatak"],kurs:["Osveži kurs"]};
-function setTab(t){ ui.tab=t; ui.confirm=null; ui.alerts=false; $("#app").classList.remove("drawer");
+function setTab(t){ ui.tab=t; ui.confirm=null; ui.alerts=false; ui.picker=null; $("#app").classList.remove("drawer");
   try{localStorage.setItem(LS+"-tab",t);}catch(e){} render(); window.scrollTo(0,0); }
 
 /* ---------- computations ---------- */
@@ -629,9 +647,21 @@ function recent(){
    Kept in a separate localStorage key so it never ends up in backups. */
 const INFO_URL = "https://raw.githubusercontent.com/jevrajevremovic-dotcom/Knjiga-lokala/info/info.json";
 const INFO_LS = LS+"-info";
-const info = {wx:null, wxAt:0, wxFor:"", crypto:null, cryptoAt:0, feed:null, feedAt:0};
+const info = {wx:null, wxAt:0, wxFor:"", crypto:null, cryptoAt:0, cryptoFor:"", feed:null, feedAt:0, coinList:null, coinListAt:0};
 try{ Object.assign(info, JSON.parse(localStorage.getItem(INFO_LS)||"{}")); }catch(e){}
 const grad = () => state.settings.find(x=>x.id==="grad") || {ime:"Beograd", lat:44.8125, lon:20.4612};
+/* What the user follows: CoinGecko coin ids and Yahoo symbols from the info.json catalog. */
+const MAX_PICK = 12;
+const pracenje = () => { const p = state.settings.find(x=>x.id==="pracenje") || {};
+  return { kripto: p.kripto || ["bitcoin","ethereum","binancecoin","ripple","solana"], berza: p.berza || ["^GSPC","^IXIC","^DJI","^GDAXI","GC=F","BZ=F"] }; };
+async function loadCoinList(){
+  if (info.coinList && Date.now()-info.coinListAt < 24*3600e3) return;
+  try{ const j = await getJSON("https://api.coingecko.com/api/v3/coins/markets?vs_currency=eur&order=market_cap_desc&per_page=100&page=1&sparkline=false");
+    if (Array.isArray(j)){ info.coinList = j.map(c=>({id:c.id, sym:String(c.symbol).toUpperCase(), name:c.name, price:c.current_price})); info.coinListAt = Date.now();
+      try{ localStorage.setItem(INFO_LS, JSON.stringify(info)); }catch(e){} }
+  }catch(e){ toast("Lista kriptovaluta nije preuzeta. Proverite internet."); }
+  if (ui.picker) render();
+}
 const getJSON = url => fetch(url,{cache:"no-store"}).then(r=>{ if(!r.ok) throw new Error(r.status); return r.json(); });
 let infoLoading = false;
 async function refreshInfo(force){
@@ -639,10 +669,11 @@ async function refreshInfo(force){
   if (force || !info.wx || now-info.wxAt > 30*60e3 || info.wxFor !== g.ime)
     jobs.push(getJSON(`https://api.open-meteo.com/v1/forecast?latitude=${g.lat}&longitude=${g.lon}&current=temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m,weather_code&daily=weather_code,temperature_2m_max,temperature_2m_min&timezone=auto&forecast_days=4`)
       .then(j=>{ info.wx=j; info.wxAt=now; info.wxFor=g.ime; }));
-  if (force || now-info.cryptoAt > 10*60e3)
-    jobs.push(getJSON("https://api.coingecko.com/api/v3/coins/markets?vs_currency=eur&ids=bitcoin,ethereum,binancecoin,solana,ripple&sparkline=true&price_change_percentage=24h")
-      .then(j=>{ if (!Array.isArray(j)) return; info.cryptoAt=now;
-        info.crypto = j.map(c=>({sym:String(c.symbol).toUpperCase(), name:c.name, price:c.current_price, pct:c.price_change_percentage_24h,
+  const ids = pracenje().kripto.join(",");
+  if (ids && (force || now-info.cryptoAt > 10*60e3 || info.cryptoFor !== ids))
+    jobs.push(getJSON("https://api.coingecko.com/api/v3/coins/markets?vs_currency=eur&sparkline=true&price_change_percentage=24h&ids="+encodeURIComponent(ids))
+      .then(j=>{ if (!Array.isArray(j)) return; info.cryptoAt=now; info.cryptoFor=ids;
+        info.crypto = j.map(c=>({id:c.id, sym:String(c.symbol).toUpperCase(), name:c.name, price:c.current_price, pct:c.price_change_percentage_24h,
           spark:((c.sparkline_in_7d&&c.sparkline_in_7d.price)||[]).filter((_,i,a)=>i%4===0||i===a.length-1)})); }));
   if (force || now-info.feedAt > 15*60e3)
     jobs.push(getJSON(INFO_URL+"?t="+Math.floor(now/300000)).then(j=>{ info.feed=j; info.feedAt=now; }));
@@ -651,7 +682,7 @@ async function refreshInfo(force){
   const res = await Promise.allSettled(jobs); infoLoading = false;
   try{ localStorage.setItem(INFO_LS, JSON.stringify(info)); }catch(e){}
   if (force && res.some(r=>r.status==="rejected")) toast("Deo podataka nije preuzet. Proverite internet.");
-  if (ui.tab==="pregled") render();
+  if (ui.tab==="pregled" || ui.picker) render();
 }
 const WMO = c => c===0?["☀️","Vedro"]:c<=2?["🌤️","Delimično oblačno"]:c===3?["☁️","Oblačno"]:c<=48?["🌫️","Magla"]:c<=57?["🌦️","Rosulja"]:
   c<=67?["🌧️","Kiša"]:c<=77?["🌨️","Sneg"]:c<=82?["🌦️","Pljuskovi"]:c<=86?["🌨️","Snežni pljuskovi"]:["⛈️","Grmljavina"];
@@ -684,17 +715,43 @@ function kursCard(){
     <div>${[["EUR","Evro"],["USD","Dolar"],["CHF","Franak"],["GBP","Funta"],["BAM","Marka"]].map(([c,n])=>`<div class="qrow k"><span class="n">${c}<small>${n}</small></span><span class="p num">${s.kurs[c]?fmt(parseNum(s.kurs[c]),4):"—"}</span></div>`).join("")}</div>
     <button class="link" data-tab="kurs" style="align-self:flex-start">Kursna lista i preračun</button></div>`;
 }
+const pickBtn = k => `<button class="link" data-picker="${k}">Izaberi</button>`;
 function berzaCard(){
-  const b = info.feed && info.feed.berza;
-  return `<div class="icard"><div class="hd"><b>Berza</b><small>${info.feed?ago(info.feed.azurirano):""}</small></div>
-    ${b && b.length ? `<div>${b.map(q=>`<div class="qrow"><span class="n">${esc(q.naziv)}<small>${esc(q.simbol)}</small></span>${mspark(q.istorija,q.promena)}<span class="p num">${q.cena!=null?fmt(q.cena):"—"} ${pctTxt(q.promena)}</span></div>`).join("")}</div>`
-      : `<div class="empty">Podaci sa berze se učitavaju…</div>`}</div>`;
+  const all = (info.feed && info.feed.berza) || [], sel = pracenje().berza;
+  const b = sel.map(s=>all.find(q=>q.simbol===s)).filter(Boolean);
+  return `<div class="icard"><div class="hd"><b>Berza</b><small>${info.feed?ago(info.feed.azurirano)+" · ":""}${pickBtn("berza")}</small></div>
+    ${b.length ? `<div>${b.map(q=>`<div class="qrow"><span class="n">${esc(q.naziv)}<small>${esc(q.simbol)}</small></span>${mspark(q.istorija,q.promena)}<span class="p num">${q.cena!=null?fmt(q.cena):"—"} ${pctTxt(q.promena)}</span></div>`).join("")}</div>`
+      : `<div class="empty">${!info.feed?"Podaci sa berze se učitavaju…":sel.length?"Izabrane vrednosti još nisu preuzete. Pokušajte kasnije.":"Ništa nije izabrano. Kliknite „Izaberi“."}</div>`}</div>`;
 }
 function kriptoCard(){
-  const c = info.crypto;
-  return `<div class="icard"><div class="hd"><b>Kripto · EUR</b><small>${info.cryptoAt?ago(new Date(info.cryptoAt).toISOString()):""}</small></div>
-    ${c && c.length ? `<div>${c.map(x=>`<div class="qrow"><span class="n">${esc(x.sym)}<small>${esc(x.name)}</small></span>${mspark(x.spark,x.pct)}<span class="p num">${fmt(x.price, x.price<10?4:2)} ${pctTxt(x.pct)}</span></div>`).join("")}</div>`
-      : `<div class="empty">Cene kriptovaluta se učitavaju…</div>`}</div>`;
+  const sel = pracenje().kripto, c = sel.map(id=>(info.crypto||[]).find(x=>x.id===id)).filter(Boolean);
+  return `<div class="icard"><div class="hd"><b>Kripto · EUR</b><small>${info.cryptoAt?ago(new Date(info.cryptoAt).toISOString())+" · ":""}${pickBtn("kripto")}</small></div>
+    ${c.length ? `<div>${c.map(x=>`<div class="qrow"><span class="n">${esc(x.sym)}<small>${esc(x.name)}</small></span>${mspark(x.spark,x.pct)}<span class="p num">${fmt(x.price, x.price<10?4:2)} ${pctTxt(x.pct)}</span></div>`).join("")}</div>`
+      : `<div class="empty">${sel.length?"Cene kriptovaluta se učitavaju…":"Ništa nije izabrano. Kliknite „Izaberi“."}</div>`}</div>`;
+}
+/* Picker sheet: checkboxes save immediately; the list is filtered by the search field. */
+function pickerView(){
+  const k = ui.picker, sel = pracenje()[k], q = (ui.pkq||"").trim().toLowerCase(), hit = (...s) => !q || s.join(" ").toLowerCase().includes(q);
+  const row = (val, title, sub, right) => `<label class="pick"><input type="checkbox" data-pick="${esc(val)}" ${sel.includes(val)?"checked":""}><span><b>${esc(title)}</b><small>${esc(sub)}</small></span><em class="num">${right||""}</em></label>`;
+  let body;
+  if (k==="berza"){
+    const all = (info.feed && info.feed.berza) || [];
+    const groups = [...new Set(all.map(x=>x.grupa||"Ostalo"))];
+    body = all.length ? groups.map(g=>{ const items = all.filter(x=>(x.grupa||"Ostalo")===g && hit(x.naziv,x.simbol));
+        return items.length ? `<div class="pgrp">${esc(g)}</div>`+items.map(x=>row(x.simbol, x.naziv, x.simbol, x.cena!=null?fmt(x.cena)+" "+pctTxt(x.promena):"")).join("") : ""; }).join("") || `<div class="empty">Nema rezultata.</div>`
+      : `<div class="empty">Lista se učitava…</div>`;
+  } else {
+    const list = info.coinList || [];
+    body = list.length ? list.filter(c=>hit(c.name,c.sym)).map((c,i)=>row(c.id, c.name, c.sym, c.price!=null?fmt(c.price, c.price<10?4:2)+" €":"")).join("") || `<div class="empty">Nema rezultata.</div>`
+      : `<div class="empty">Lista se učitava…</div>`;
+  }
+  return `<div class="modal" data-modal><div class="sheet" role="dialog" aria-modal="true" aria-label="Izbor">
+    <div class="sh-head"><h2>${k==="berza"?"Berza: šta pratite":"Kripto: šta pratite"}</h2>
+      <p>${k==="berza"?"Indeksi, roba, akcije i valute. Cene se osvežavaju svakih sat vremena.":"100 najvećih kriptovaluta. Cene u evrima, osvežavaju se na 10 minuta."}</p>
+      <input id="pk-q" type="search" placeholder="Pretraga" value="${esc(ui.pkq||"")}" autocomplete="off" aria-label="Pretraga"></div>
+    <div class="sh-body" id="pk-body">${body}</div>
+    <div class="sh-foot"><span>Izabrano ${sel.length} od najviše ${MAX_PICK}</span><button class="btn" data-pickdone>Gotovo</button></div>
+  </div></div>`;
 }
 function newsPanel(){
   const v = info.feed && info.feed.vesti;
@@ -1079,7 +1136,9 @@ function render(){
   const views = {pregled:viewPregled,pazar:viewPazar,troskovi:viewTroskovi,gotovina:viewGotovina,dugovi:viewDugovi,krediti:viewKrediti,radnici:viewRadnici,imenik:viewImenik,zadaci:viewZadaci,kurs:viewKurs};
   // keep in-progress form text across re-renders (edit forms of workers are refilled from data instead)
   const keep = {}; document.querySelectorAll("#main input:not([type=checkbox]),#main select").forEach(el=>{ if(el.id && el.dataset.fx===undefined && !el.id.startsWith("re-") && !el.dataset.gstatus) keep[el.id]=el.value; });
-  $("#main").innerHTML = views[ui.tab]();
+  const pkScroll = $("#pk-body") ? $("#pk-body").scrollTop : 0;
+  $("#main").innerHTML = views[ui.tab]() + (ui.picker ? pickerView() : "");
+  if ($("#pk-body")) $("#pk-body").scrollTop = pkScroll;
   Object.entries(keep).forEach(([id,v])=>{ const el=document.getElementById(id); if(el && id!=="month" && id!=="im-q") el.value=v; });
   if (focusId && $("#main").querySelector("#"+CSS.escape(focusId))){ const el=document.getElementById(focusId); el.focus(); try{ if(selStart!=null) el.setSelectionRange(selStart,selStart);}catch(e){} }
   calc();
@@ -1111,19 +1170,26 @@ document.addEventListener("click", e=>{
   if (b.hasAttribute("data-showdone")){ ui.showDone=!ui.showDone; render(); return; }
   if (b.hasAttribute("data-export")){ exportBackup(); return; }
   if (b.hasAttribute("data-fxrefresh")){ refreshRates(true); return; }
+  if (b.dataset.picker){ ui.picker=b.dataset.picker; ui.pkq=""; render(); if (ui.picker==="kripto") loadCoinList(); else if (Date.now()-info.feedAt > 2*60e3){ info.feedAt=0; refreshInfo(false); } return; }
+  if (b.hasAttribute("data-pickdone")){ closePicker(); return; }
   if (b.hasAttribute("data-inforefresh")){ refreshInfo(true); refreshRates(true); return; }
   if (b.hasAttribute("data-cityedit")){ ui.cityEdit=!ui.cityEdit; render(); if(ui.cityEdit) $("#grad-ime")?.focus(); return; }
 });
 $("#scrim").addEventListener("click", ()=>$("#app").classList.remove("drawer"));
+function closePicker(){ ui.picker=null; ui.pkq=""; render(); refreshInfo(false); }
+document.addEventListener("click", e=>{ if (e.target.matches && e.target.matches("[data-modal]")) closePicker(); });
 document.addEventListener("keydown", e=>{
   const h=e.target.closest("[data-toggle]"); if(h && (e.key==="Enter"||e.key===" ")){ e.preventDefault(); h.click(); }
-  if (e.key==="Escape"){ $("#app").classList.remove("drawer"); $("#results").hidden=true; if(ui.alerts){ ui.alerts=false; renderChrome(); } }
+  if (e.key==="Escape"){ if (ui.picker) closePicker(); $("#app").classList.remove("drawer"); $("#results").hidden=true; if(ui.alerts){ ui.alerts=false; renderChrome(); } }
 });
 document.addEventListener("toggle", e=>{ if (e.target.matches && e.target.matches("details[data-past]")) ui.open.__gone = e.target.open; }, true);
 document.addEventListener("change", e=>{
   const el=e.target;
   if (el.id==="month"){ ui.month = el.value || thisMonth(); render(); return; }
   if (el.dataset.task){ const z=state.zadaci.find(x=>x.id===el.dataset.task); if(z){ const {id,...rest}=z; put("zadaci",id,{...rest,gotovo:el.checked,zavrseno:el.checked?Date.now():null}); } return; }
+  if (el.dataset.pick!==undefined){ const p=pracenje(), k=ui.picker, v=el.dataset.pick; let list=p[k].filter(x=>x!==v);
+    if (el.checked){ if (list.length>=MAX_PICK){ el.checked=false; toast(`Najviše ${MAX_PICK} stavki`); return; } list.push(v); }
+    put("settings","pracenje",{...p,[k]:list}); return; }
   if (el.dataset.gstatus){ const g=state.gotovina.find(x=>x.id===el.dataset.gstatus); if(g){ const {id,...rest}=g; const paid=el.value==="isplaceno";
     put("gotovina",id,{...rest,status:el.value,isplaceno:paid?today():""}).then(()=>toast(paid?"Označeno kao isplaćeno":"Vraćeno u neisplaćeno")); } return; }
   if (el.dataset.fx){ const s=settings(); const v=parseNum(el.value); const rates={...s.kurs};
@@ -1135,6 +1201,7 @@ document.addEventListener("change", e=>{
 document.addEventListener("input", e=>{
   if (e.target.id==="calc-amt") calc();
   if (e.target.id==="im-q"){ ui.imq=e.target.value; render(); }
+  if (e.target.id==="pk-q"){ ui.pkq=e.target.value; render(); }
   if (e.target.id==="q") renderResults();
 });
 
