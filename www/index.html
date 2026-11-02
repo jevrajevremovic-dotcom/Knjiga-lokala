@@ -389,7 +389,7 @@ details.past[open] summary::before{transform:rotate(90deg)}
   <aside class="side" id="side" aria-label="Glavni meni">
     <div class="brand"><span class="logo"><svg class="i" viewBox="0 0 24 24"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2zM9 8h6M9 12h6M9 16h3"/></svg></span>Knjiga lokala</div>
     <nav class="nav" id="nav"></nav>
-    <div class="side-foot"><span class="av"><svg class="i" viewBox="0 0 24 24"><path d="M3 21V8l9-5 9 5v13M9 21v-6h6v6"/></svg></span><div><b>Moji lokali</b><span id="sync"><i></i>Sačuvano na uređaju</span></div></div>
+    <div class="side-foot"><span class="av"><svg class="i" viewBox="0 0 24 24"><path d="M3 21V8l9-5 9 5v13M9 21v-6h6v6"/></svg></span><div><b id="firmname">Moji lokali</b><span id="sync"><i></i>Sačuvano na uređaju</span></div></div>
   </aside>
   <div class="scrim" id="scrim"></div>
   <div class="content">
@@ -454,7 +454,7 @@ function lsSave(){ try{ localStorage.setItem(LS, JSON.stringify(state)); syncRem
 
 async function put(col, id, data){
   const doc = {...data, id};
-  const arr=state[col]; const i=arr.findIndex(x=>x.id===id); if(i>=0) arr[i]=doc; else arr.push(doc); lsSave(); render();
+  const arr=state[col]; const i=arr.findIndex(x=>x.id===id); if(i>=0) arr[i]=doc; else arr.push(doc); lsSave(); enqueue(col, doc); render();
 }
 async function del(col, id){ removeWithUndo([[col, x=>x.id===id]]); }
 /* Removes matching docs (with dependents), saves, and offers "Poništi" for a few seconds. */
@@ -469,6 +469,7 @@ function removeWithUndo(rules, msg){
   rules.forEach(([col,f])=>{ if (CASCADE[col]) state[col].filter(f).forEach(d=>all.push(...CASCADE[col](d.id))); });
   all.forEach(([col,f])=>{ state[col].filter(f).forEach(d=>removed.push([col,d])); });
   all.forEach(([col,f])=>{ state[col] = state[col].filter(x=>!f(x)); });
+  removed.forEach(([col,d])=>enqueue(col, d, true));
   lsSave(); render();
   lastDel = removed;
   const u = $("#undo"); u.querySelector("span").textContent = msg || "Obrisano"; u.classList.add("on");
@@ -476,7 +477,7 @@ function removeWithUndo(rules, msg){
 }
 function undoDelete(){
   if (!lastDel) return;
-  lastDel.forEach(([col,d])=>{ if (!state[col].some(x=>x.id===d.id)) state[col].push(d); });
+  lastDel.forEach(([col,d])=>{ if (!state[col].some(x=>x.id===d.id)){ state[col].push(d); enqueue(col, d); } });
   lastDel = null; $("#undo").classList.remove("on"); lsSave(); render(); toast("Vraćeno");
 }
 
@@ -517,7 +518,12 @@ function importBackup(file){
     try{
       const o = JSON.parse(rd.result); const d = o.podaci || o;
       if (!d || !Array.isArray(d.pazari)) throw 0;
-      COLS.forEach(c=>state[c]=Array.isArray(d[c])?d[c]:[]); lsSave(); ui.confirm=null; render(); toast("Podaci vraćeni iz kopije");
+      if (cloud.firma && cloud.uloga!=="vlasnik"){ toast("Samo vlasnik može da vrati kopiju u zajedničku bazu."); return; }
+      const old = COLS.flatMap(c=>state[c].map(x=>[c,x]));
+      COLS.forEach(c=>state[c]=Array.isArray(d[c])?d[c]:[]);
+      // In the shared base the copy replaces the firm's data: upload everything, delete what the copy lacks.
+      if (cloud.firma){ COLS.forEach(c=>state[c].forEach(x=>enqueue(c,x))); old.forEach(([c,x])=>{ if (!state[c].some(y=>y.id===x.id)) enqueue(c,x,true); }); }
+      lsSave(); ui.confirm=null; render(); toast("Podaci vraćeni iz kopije");
     }catch(e){ toast("Ovo nije ispravna rezervna kopija."); }
   };
   rd.readAsText(file);
@@ -571,7 +577,7 @@ const NAV = [["Poslovanje",["pregled","pazar","troskovi","gotovina"]],["Obaveze"
 const BOTTOM = ["pregled","pazar","troskovi","dugovi"];
 const QUICK = {pregled:["Dodaj pazar","pazar"],pazar:["Dodaj pazar"],troskovi:["Dodaj trošak"],gotovina:["Dodaj račun"],dugovi:["Dodaj dobavljača"],
   krediti:["Dodaj kredit"],radnici:["Dodaj radnika"],imenik:["Dodaj kontakt"],zadaci:["Dodaj zadatak"],kurs:["Osveži kurs"],asistent:["Novo pitanje"],podesavanja:["Napravi kopiju"]};
-function setTab(t){ ui.tab=t; ui.confirm=null; ui.alerts=false; ui.picker=null; ui.edit=null; $("#app").classList.remove("drawer");
+function setTab(t){ if (!allowedTab(t)) t = "pazar"; ui.tab=t; ui.confirm=null; ui.alerts=false; ui.picker=null; ui.edit=null; $("#app").classList.remove("drawer");
   try{localStorage.setItem(LS+"-tab",t);}catch(e){} render(); window.scrollTo(0,0); }
 
 /* ---------- computations ---------- */
@@ -696,9 +702,13 @@ const delBtn = (col,id) => ui.confirm===col+":"+id
   : `<span class="rowacts">${EDIT[col]?`<button class="x ed" aria-label="Izmeni" data-edit="${col}:${id}">✎</button>`:""}<button class="x" aria-label="Obriši" data-askdel="${col}:${id}">×</button></span>`;
 
 /* ---------- editing any entry: one field list per collection, shown in a sheet ---------- */
+// A 'smena' member may only use their own lokal.
+const lokaliFor = shared => { const ml = myLokal(), all = settings().lokali.map((n,i)=>[i,n]);
+  return ml!=null ? all.filter(([i])=>i===ml) : shared ? [["","Zajedničko"], ...all] : all; };
+const lokalOptions = shared => lokaliFor(shared).map(([v,n])=>`<option value="${v}">${esc(n)}</option>`).join("");
 const OPT = {
-  lokal: () => settings().lokali.map((n,i)=>[i,n]),
-  lokalOpt: () => [["","Zajedničko"], ...settings().lokali.map((n,i)=>[i,n])],
+  lokal: () => lokaliFor(false),
+  lokalOpt: () => lokaliFor(true),
   kat: () => settings().kategorije.map(k=>[k,k]),
   cur: () => CURRENCIES.map(([c])=>[c,c]),
   smena: () => [["","Cela"],["1","1. smena"],["2","2. smena"],["3","3. smena"]],
@@ -987,7 +997,7 @@ function viewPazar(){
   return `
   ${panel("Unesi pazar", `<form class="entry" id="f-pazar">
       <div class="field"><label for="pz-datum">Datum</label><input type="date" id="pz-datum" value="${today()}" required></div>
-      <div class="field"><label for="pz-lokal">Lokal</label><select id="pz-lokal">${s.lokali.map((n,i)=>`<option value="${i}">${esc(n)}</option>`).join("")}</select></div>
+      <div class="field"><label for="pz-lokal">Lokal</label><select id="pz-lokal">${lokalOptions(false)}</select></div>
       <div class="field"><label for="pz-smena">Smena</label><select id="pz-smena">${OPT.smena().map(([v,t])=>`<option value="${v}">${t}</option>`).join("")}</select></div>
       <div class="field"><label for="pz-got">Gotovina (RSD)</label><input class="amt" id="pz-got" inputmode="decimal" placeholder="0,00"></div>
       <div class="field"><label for="pz-kar">Kartice (RSD)</label><input class="amt" id="pz-kar" inputmode="decimal" placeholder="0,00"></div>
@@ -1011,12 +1021,12 @@ function viewTroskovi(){
   ${panel("Unesi trošak", `<form class="entry" id="f-trosak">
       <div class="field"><label for="tr-datum">Datum</label><input type="date" id="tr-datum" value="${today()}" required></div>
       <div class="field"><label for="tr-kat">Vrsta troška</label><select id="tr-kat">${s.kategorije.map(c=>`<option>${esc(c)}</option>`).join("")}</select></div>
-      <div class="field"><label for="tr-lokal">Lokal</label><select id="tr-lokal"><option value="">Zajedničko</option>${s.lokali.map((n,i)=>`<option value="${i}">${esc(n)}</option>`).join("")}</select></div>
+      <div class="field"><label for="tr-lokal">Lokal</label><select id="tr-lokal">${lokalOptions(true)}</select></div>
       <div class="field"><label for="tr-iznos">Iznos (RSD)</label><input class="amt" id="tr-iznos" inputmode="decimal" placeholder="0,00" required></div>
       <div class="field"><label for="tr-opis">Opis</label><input id="tr-opis" placeholder="npr. pijaca, Maxi"></div>
       <button class="btn" type="submit">Dodaj trošak</button>
     </form>`)}
-  ${duePanel(m)}
+  ${cloud.uloga==="smena"?"":duePanel(m)}
   <div class="grid-main">
     <section class="panel">${head("Troškovi", monthBar())}
       ${table(["Datum","Vrsta","Opis",">Iznos",""], rows.map(r=>`<tr><td>${fdate(r.datum)}</td><td><span class="chip">${esc(r.kategorija)}</span></td><td class="mut">${esc(r.opis)}${r.lokal!==""&&r.lokal!=null?` · ${esc(s.lokali[r.lokal])}`:""}</td><td class="r num">${fmt(r.iznos)}</td><td class="r">${delBtn("troskovi",r.id)}</td></tr>`), `Nema troškova za ${mname(m)}.`)}
@@ -1024,7 +1034,7 @@ function viewTroskovi(){
     </section>
     <div class="stack">
       ${panel("Po vrsti", catsBlock(by))}
-      ${panel("Vrste troškova", `<div class="tags">${s.kategorije.map((c,i)=>`<span class="tag">${esc(c)}<button class="x" aria-label="Ukloni ${esc(c)}" data-delcat="${i}">×</button></span>`).join("")}</div>
+      ${cloud.uloga==="smena"?"":panel("Vrste troškova", `<div class="tags">${s.kategorije.map((c,i)=>`<span class="tag">${esc(c)}<button class="x" aria-label="Ukloni ${esc(c)}" data-delcat="${i}">×</button></span>`).join("")}</div>
         <form class="addrow" id="f-kat"><input id="kat-new" placeholder="Nova vrsta, npr. Kafa" required><button class="btn small" type="submit">Dodaj</button></form>`)}
     </div>
   </div>`;
@@ -1533,6 +1543,217 @@ function viewAsistent(){
       : `<form class="addrow" id="f-aikey"><input id="ai-key" type="password" placeholder="sk-ant-…" autocomplete="off" aria-label="Anthropic API ključ"><button class="btn" type="submit">Sačuvaj ključ</button></form>`}`)}`;
 }
 
+/* ---------- zajednička baza (Supabase) ----------
+   Every record is a row in `zapisi` (see supabase/setup.sql). The phone keeps working from its local copy;
+   changes go into a queue that is sent when online, and other phones' changes arrive live (realtime) or on
+   the next pull. Exchange rate, weather city and followed markets stay per device. */
+const CLOUD_DEFAULT = {url:"", key:""};   // the firm's project; entered in Podešavanja until it is built in here
+const CLOUD_LS = LS+"-cloud", QUEUE_LS = LS+"-queue";
+const SB_URL = "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/+esm";
+const LOCAL_ONLY = new Set(["settings/kurs","settings/grad","settings/pracenje"]);
+const ROLE = {vlasnik:"Vlasnik", menadzer:"Menadžer", smena:"Smena"};
+const cloud = {sb:null, user:null, firma:null, naziv:"", uloga:null, lokal:null, status:"off", msg:"", lastSync:"", chan:null, busy:false, members:[], invites:[], newCode:"", mode:"login"};
+function cloudCfg(){ let o = {}; try{ o = JSON.parse(localStorage.getItem(CLOUD_LS)||"{}"); }catch(e){} return {url:o.url||CLOUD_DEFAULT.url, key:o.key||CLOUD_DEFAULT.key, firma:o.firma||"", lastSync:o.lastSync||""}; }
+function setCloudCfg(patch){ let o = {}; try{ o = JSON.parse(localStorage.getItem(CLOUD_LS)||"{}"); }catch(e){} try{ localStorage.setItem(CLOUD_LS, JSON.stringify({...o, ...patch})); }catch(e){} }
+let queue = []; try{ queue = JSON.parse(localStorage.getItem(QUEUE_LS)||"[]"); }catch(e){}
+const saveQueue = () => { try{ localStorage.setItem(QUEUE_LS, JSON.stringify(queue)); }catch(e){} };
+const synced = (col, id) => !LOCAL_ONLY.has(col+"/"+id);
+function enqueue(col, doc, deleted){
+  if (!cloud.firma || !doc || !synced(col, doc.id)) return;
+  const key = col+"/"+doc.id; queue = queue.filter(q=>q.id!==key); queue.push({id:key, kolekcija:col, podaci:doc, obrisano:!!deleted});
+  saveQueue(); setCloudStatus(); flushSoon();
+}
+let flushT; const flushSoon = () => { clearTimeout(flushT); flushT = setTimeout(flush, 400); };
+async function flush(){
+  if (!cloud.sb || !cloud.user || !cloud.firma || !queue.length || cloud.busy) return;
+  if (!navigator.onLine){ setCloudStatus("offline"); return; }
+  cloud.busy = true; const batch = queue.slice(0, 200);
+  let error;
+  try{ ({error} = await cloud.sb.from("zapisi").upsert(batch.map(q=>({firma:cloud.firma, id:q.id, kolekcija:q.kolekcija, podaci:q.podaci, obrisano:q.obrisano})))); }
+  catch(e){ error = {message:String(e && e.message || e)}; }
+  cloud.busy = false;
+  if (error){
+    // A change this member may not make would block the queue forever; drop it and say so.
+    if (/row-level security|permission denied|42501/i.test(error.message||"")){ queue = queue.filter(q=>!batch.includes(q)); saveQueue(); toast("Nemate pravo da sačuvate ovaj unos u zajedničku bazu."); }
+    setCloudStatus("error", error.message); return;
+  }
+  queue = queue.filter(q=>!batch.includes(q)); saveQueue(); setCloudStatus("ok");
+  if (queue.length) flushSoon();
+}
+function applyRow(r){
+  const col = r.kolekcija, d = r.podaci;
+  if (r.izmenjeno && r.izmenjeno > cloud.lastSync) cloud.lastSync = r.izmenjeno;
+  if (!state[col] || !d || !d.id || !synced(col, d.id)) return;
+  if (queue.some(q=>q.id===col+"/"+d.id)) return;   // our unsent change wins until it is sent
+  const arr = state[col], i = arr.findIndex(x=>x.id===d.id);
+  if (r.obrisano){ if (i>=0) arr.splice(i,1); } else if (i>=0) arr[i] = d; else arr.push(d);
+}
+let renderT; const renderSoon = () => { clearTimeout(renderT); renderT = setTimeout(render, 250); };
+async function pullAll(){
+  const rows = [];
+  for (let from = 0; ; from += 1000){
+    const {data, error} = await cloud.sb.from("zapisi").select("id,kolekcija,podaci,obrisano,izmenjeno").eq("firma", cloud.firma).eq("obrisano", false).order("id").range(from, from+999);
+    if (error) throw error; rows.push(...data); if (data.length < 1000) break;
+  }
+  const keep = state.settings.filter(s=>!synced("settings", s.id));
+  COLS.forEach(c=>state[c] = []); state.settings = keep; cloud.lastSync = "";
+  rows.forEach(applyRow);
+  queue.forEach(q=>{ const arr = state[q.kolekcija]; if (!arr) return; const i = arr.findIndex(x=>x.id===q.podaci.id);
+    if (q.obrisano){ if (i>=0) arr.splice(i,1); } else if (i>=0) arr[i] = q.podaci; else arr.push(q.podaci); });
+  setCloudCfg({lastSync:cloud.lastSync}); lsSave(); render();
+}
+async function pullChanges(){
+  if (!cloud.sb || !cloud.firma || !navigator.onLine) return;
+  const since = cloud.lastSync || cloudCfg().lastSync; if (!since) return pullAll();
+  const {data, error} = await cloud.sb.from("zapisi").select("id,kolekcija,podaci,obrisano,izmenjeno").eq("firma", cloud.firma).gt("izmenjeno", since).order("izmenjeno").limit(5000);
+  if (error){ setCloudStatus("error", error.message); return; }
+  if (data.length){ data.forEach(applyRow); setCloudCfg({lastSync:cloud.lastSync}); lsSave(); renderSoon(); }
+}
+function setCloudStatus(st, msg){
+  if (st) cloud.status = st; if (msg!==undefined) cloud.msg = msg;
+  const el = $("#sync"); if (!el) return;
+  const txt = !cloud.firma ? "Sačuvano na uređaju"
+    : cloud.sb && !cloud.user ? `Niste prijavljeni${queue.length?` · čeka ${queue.length}`:""}`
+    : cloud.status==="offline" ? `Bez interneta${queue.length?` · čeka ${queue.length}`:""}`
+    : cloud.status==="error" ? "Greška u sinhronizaciji"
+    : queue.length ? `Šalje se ${queue.length}…` : `Povezano · ${cloud.naziv||"firma"}`;
+  el.innerHTML = `<i style="background:${!cloud.firma||cloud.user&&cloud.status==="ok"&&!queue.length?"var(--green)":cloud.status==="error"?"var(--red)":"var(--yellow)"}"></i>${esc(txt)}`;
+}
+async function cloudInit(){
+  const c = cloudCfg(); if (!c.url || !c.key) return;
+  try{
+    const {createClient} = await import(SB_URL);
+    cloud.sb = createClient(c.url, c.key, {auth:{persistSession:true, autoRefreshToken:true, storageKey:LS+"-auth"}});
+    const {data} = await cloud.sb.auth.getSession(); cloud.user = data.session ? data.session.user : null;
+    cloud.sb.auth.onAuthStateChange((ev, s)=>{ cloud.user = s ? s.user : null; });
+    if (cloud.user) await loadMembership();
+  }catch(e){ setCloudStatus("error", "Biblioteka za bazu nije učitana (internet?)"); }
+  render();
+}
+async function loadMembership(){
+  const {data, error} = await cloud.sb.from("clanovi").select("firma,uloga,lokal,ime,firme(naziv)").eq("korisnik", cloud.user.id);
+  if (error){ setCloudStatus("error", error.message); return; }
+  const want = cloud.joined || cloudCfg().firma, m = data.find(x=>x.firma===want) || data[0]; cloud.joined = null;
+  if (m) await connectFirma(m);
+}
+async function connectFirma(m){
+  const isNewHere = cloudCfg().firma !== m.firma;
+  // Joining replaces this phone's data with the firm's; keep the previous local data aside, just in case.
+  if (isNewHere && hasData()){ try{ localStorage.setItem(LS+"-pre-baze", JSON.stringify(state)); }catch(e){} queue = []; saveQueue(); }
+  Object.assign(cloud, {firma:m.firma, uloga:m.uloga, lokal:m.lokal, naziv:(m.firme&&m.firme.naziv)||""});
+  setCloudCfg({firma:m.firma, uloga:m.uloga, lokal:m.lokal, naziv:cloud.naziv}); if (isNewHere) setCloudCfg({lastSync:""});
+  try{ await flush(); await pullAll(); }catch(e){ setCloudStatus("error", e.message||String(e)); }
+  subscribe(); setCloudStatus("ok");
+  if (!allowedTab(ui.tab)) setTab(cloud.uloga==="smena" ? "pazar" : "pregled");
+  if (cloud.uloga==="vlasnik") loadMembers();
+}
+function subscribe(){
+  if (cloud.chan) cloud.sb.removeChannel(cloud.chan);
+  cloud.chan = cloud.sb.channel("zapisi-"+cloud.firma)
+    .on("postgres_changes", {event:"*", schema:"public", table:"zapisi", filter:"firma=eq."+cloud.firma}, p=>{ if (p.new && p.new.id){ applyRow(p.new); setCloudCfg({lastSync:cloud.lastSync}); lsSave(); renderSoon(); } })
+    .subscribe(st=>{ if (st==="SUBSCRIBED") pullChanges(); });
+}
+async function loadMembers(){
+  const [a, b] = await Promise.all([
+    cloud.sb.from("clanovi").select("korisnik,ime,email,uloga,lokal").eq("firma", cloud.firma).order("napravljeno"),
+    cloud.sb.from("pozivnice").select("kod,uloga,lokal,ime,napravljeno").eq("firma", cloud.firma).is("iskoristio", null).order("napravljeno", {ascending:false})
+  ]);
+  cloud.members = a.data || []; cloud.invites = b.data || []; if (ui.tab==="podesavanja") render();
+}
+const AUTH_ERR = m => /Invalid login/i.test(m) ? "Pogrešan mejl ili lozinka." : /already registered|already been registered/i.test(m) ? "Nalog sa tim mejlom već postoji. Prijavite se."
+  : /Password should be/i.test(m) ? "Lozinka mora imati bar 6 znakova." : /Email not confirmed/i.test(m) ? "Potvrdite nalog preko linka koji je stigao na mejl."
+  : /valid email|invalid format/i.test(m) ? "Mejl adresa nije ispravna." : /Pozivnica ne važi/.test(m) ? "Pozivnica ne važi (iskorišćena, istekla ili pogrešno prepisana)." : m;
+async function signIn(email, pass){
+  const {data, error} = await cloud.sb.auth.signInWithPassword({email, password:pass});
+  if (error){ toast(AUTH_ERR(error.message)); return false; }
+  cloud.user = data.user; await loadMembership(); render(); return true;
+}
+async function signUp(email, pass, ime){
+  const {data, error} = await cloud.sb.auth.signUp({email, password:pass, options:{data:{ime}}});
+  if (error){ toast(AUTH_ERR(error.message)); return false; }
+  if (!data.session){ toast("Nalog je napravljen. Potvrdite ga preko linka na mejlu, pa se prijavite."); cloud.mode = "login"; render(); return false; }
+  cloud.user = data.user; render(); return true;
+}
+async function createFirm(naziv){
+  const {data:f, error} = await cloud.sb.rpc("napravi_firmu", {naziv});
+  if (error){ toast(AUTH_ERR(error.message)); return; }
+  // The owner's existing data becomes the firm's data.
+  cloud.uploading = true; cloud.firma = f;
+  COLS.forEach(c=>state[c].forEach(x=>enqueue(c, x)));
+  for (let i = 0; i < 50 && queue.length; i++){ await flush(); if (cloud.status==="error") break; }
+  cloud.uploading = false; setCloudCfg({firma:f});   // this phone's data is the firm's: nothing to set aside
+  if (queue.length){ toast("Deo podataka nije poslat. Pokušaće ponovo kad bude interneta."); }
+  await loadMembership(); toast("Firma je napravljena. Podaci su sada u zajedničkoj bazi."); render();
+}
+async function joinFirm(kod, ime){
+  const {data:f, error} = await cloud.sb.rpc("pridruzi_se", {kod, ime});
+  if (error){ toast(AUTH_ERR(error.message)); return; }
+  cloud.joined = f; await loadMembership(); toast("Povezani ste sa firmom "+(cloud.naziv||"")); render();
+}
+async function signOut(){
+  if (cloud.chan) cloud.sb.removeChannel(cloud.chan);
+  await cloud.sb.auth.signOut();
+  // The firm's data stays in the base; this phone forgets it.
+  const keep = state.settings.filter(s=>!synced("settings", s.id)); COLS.forEach(c=>state[c] = []); state.settings = keep;
+  queue = []; saveQueue(); setCloudCfg({firma:"", lastSync:"", uloga:null, lokal:null, naziv:""});
+  Object.assign(cloud, {user:null, firma:null, uloga:null, lokal:null, naziv:"", members:[], invites:[], chan:null});
+  lsSave(); setCloudStatus("ok"); setTab("podesavanja"); toast("Odjavljeni ste");
+}
+// What each role sees: smena only enters takings and costs for its own lokal.
+const SMENA_TABS = ["pazar","troskovi","zadaci","kurs","podesavanja"];
+const allowedTab = t => cloud.uloga!=="smena" || SMENA_TABS.includes(t);
+const myLokal = () => cloud.uloga==="smena" && cloud.lokal!=null ? cloud.lokal : null;
+
+function cloudPanel(){
+  const c = cloudCfg(), s = settings();
+  if (!c.url || !c.key) return panel("Zajednička baza", `<p class="note" style="margin-top:0">Da bi više ljudi radilo u istoj knjizi (vlasnik, menadžer, šefovi smena), potrebna je baza na internetu (Supabase). Unesite adresu i ključ projekta (Project URL i publishable/anon key iz Supabase › Project Settings › API).</p>
+    <form class="entry" id="f-cloudcfg"><div class="field"><label for="cc-url">Project URL</label><input id="cc-url" placeholder="https://xxxx.supabase.co" required></div>
+      <div class="field"><label for="cc-key">Publishable / anon key</label><input id="cc-key" placeholder="sb_publishable_… ili eyJ…" required></div>
+      <button class="btn" type="submit">Poveži</button></form>`);
+  if (!cloud.sb) return panel("Zajednička baza", `<div class="empty">Povezivanje sa bazom…</div>`);
+  if (!cloud.user){
+    const up = cloud.mode==="signup";
+    return panel("Zajednička baza", `${cloud.firma?`<div class="banner" style="margin-bottom:12px"><span>Ovaj telefon je povezan sa firmom <b>${esc(cloud.naziv||"")}</b>, ali niste prijavljeni${queue.length?`; ${queue.length} izmena čeka slanje`:""}. Prijavite se istim nalogom.</span></div>`:""}<p class="note" style="margin-top:0">${up?"Novi nalog. Vlasnik posle prijave pravi firmu; radnici unose pozivnicu koju im pošalje vlasnik.":"Prijavite se nalogom za zajedničku bazu."}</p>
+      <form class="entry" id="f-auth">
+        ${up?`<div class="field"><label for="au-ime">Ime</label><input id="au-ime" placeholder="npr. Nenad" required></div>`:""}
+        <div class="field"><label for="au-email">Mejl</label><input id="au-email" type="email" autocomplete="username" required></div>
+        <div class="field"><label for="au-pass">Lozinka</label><input id="au-pass" type="password" autocomplete="${up?"new-password":"current-password"}" minlength="6" required></div>
+        <button class="btn" type="submit">${up?"Napravi nalog":"Prijavi se"}</button></form>
+      <div class="toolbar" style="margin-top:10px"><button class="link" data-authmode="${up?"login":"signup"}">${up?"Već imate nalog? Prijava":"Nemate nalog? Napravite ga"}</button></div>`);
+  }
+  if (!cloud.firma) return panel("Zajednička baza", `<p class="note" style="margin-top:0">Prijavljeni ste kao <b>${esc(cloud.user.email)}</b>.</p>
+    <div class="grid2">
+      <div><div class="sec-title">Vlasnik: napravite firmu</div><p class="note">Podaci sa ovog telefona postaju podaci firme.</p>
+        <form class="addrow" id="f-firma"><input id="fi-naziv" placeholder="Naziv, npr. Moji lokali" required><button class="btn" type="submit">Napravi</button></form></div>
+      <div><div class="sec-title">Radnik: imam pozivnicu</div><p class="note">Podaci firme zamenjuju podatke sa ovog telefona.</p>
+        <form class="entry" id="f-join"><div class="field"><label for="jo-kod">Kod pozivnice</label><input id="jo-kod" placeholder="npr. 7F3A9C21" required autocomplete="off"></div>
+          <div class="field"><label for="jo-ime">Vaše ime</label><input id="jo-ime" required></div><button class="btn" type="submit">Pridruži se</button></form></div>
+    </div>
+    <div class="toolbar" style="margin-top:12px"><button class="btn ghost small" data-signout>Odjavi se</button></div>`);
+  const owner = cloud.uloga==="vlasnik";
+  const lokSel = (id, v) => `<select id="${id}">${s.lokali.map((n,i)=>`<option value="${i}" ${String(v)===String(i)?"selected":""}>${esc(n)}</option>`).join("")}</select>`;
+  return panel("Zajednička baza", `
+    <div class="toolbar"><span class="pill c-green">Povezano</span><span><b>${esc(cloud.naziv)}</b> · ${esc(cloud.user.email)} · ${ROLE[cloud.uloga]}${myLokal()!=null?" · "+esc(s.lokali[myLokal()]):""}</span>
+      ${ui.confirm==="signout"?`<span class="confirm">Odjava briše podatke firme sa ovog telefona (ostaju u bazi). <button class="btn danger small" data-signout>Odjavi se</button><button class="btn ghost small" data-cancel>Ne</button></span>`:`<button class="btn ghost small" data-askdel="signout">Odjavi se</button>`}</div>
+    ${queue.length?`<p class="note">Čeka slanje: ${queue.length} izmena${navigator.onLine?"":" (nema interneta)"}.</p>`:""}
+    ${cloud.status==="error"&&cloud.msg?`<p class="note neg">Greška: ${esc(cloud.msg)}</p>`:""}
+    ${owner?`<div class="sec-title" style="margin-top:14px">Korisnici</div>
+      ${table(["Ime","Mejl","Uloga","Lokal",""], cloud.members.map(m=>{ const me = m.korisnik===cloud.user.id;
+        return `<tr><td><b>${esc(m.ime||"—")}</b></td><td class="mut">${esc(m.email)}</td>
+          <td>${me||m.uloga==="vlasnik"?ROLE[m.uloga]:`<select class="pillsel c-blue" data-mrole="${m.korisnik}"><option value="menadzer" ${m.uloga==="menadzer"?"selected":""}>Menadžer</option><option value="smena" ${m.uloga==="smena"?"selected":""}>Smena</option></select>`}</td>
+          <td>${m.uloga==="smena"?`<select class="pillsel c-purple" data-mlokal="${m.korisnik}">${s.lokali.map((n,i)=>`<option value="${i}" ${m.lokal===i?"selected":""}>${esc(n)}</option>`).join("")}</select>`:"svi"}</td>
+          <td class="r">${me||m.uloga==="vlasnik"?"":(ui.confirm==="clan:"+m.korisnik?`<span class="confirm"><button class="btn danger small" data-mdel="${m.korisnik}">Ukloni</button><button class="btn ghost small" data-cancel>Ne</button></span>`:`<button class="x" data-askdel="clan:${m.korisnik}" aria-label="Ukloni korisnika">×</button>`)}</td></tr>`; }), "Učitavanje…")}
+      <div class="sec-title" style="margin-top:14px">Nova pozivnica</div>
+      <form class="entry" id="f-poziv">
+        <div class="field"><label for="po-ime">Ime radnika</label><input id="po-ime" placeholder="npr. Ana" required></div>
+        <div class="field"><label for="po-uloga">Uloga</label><select id="po-uloga"><option value="smena">Smena (samo pazar i troškovi lokala)</option><option value="menadzer">Menadžer (sve osim korisnika)</option></select></div>
+        <div class="field"><label for="po-lokal">Lokal (za smenu)</label>${lokSel("po-lokal",0)}</div>
+        <button class="btn" type="submit">Napravi pozivnicu</button></form>
+      ${cloud.newCode?`<div class="banner" style="margin-top:12px"><span>Pozivnica: <b class="num" style="font-size:20px;letter-spacing:.08em">${esc(cloud.newCode)}</b> · važi 14 dana, jednom. Pošaljite je radniku zajedno sa linkom za aplikaciju.</span><button class="btn small" data-copycode="${esc(cloud.newCode)}">Kopiraj</button></div>`:""}
+      ${cloud.invites.length?`<div style="margin-top:12px">${table(["Kod","Ime","Uloga","Lokal",""], cloud.invites.map(p=>`<tr><td class="num"><b>${esc(p.kod)}</b></td><td>${esc(p.ime)}</td><td>${ROLE[p.uloga]}</td><td class="mut">${p.lokal!=null?esc(s.lokali[p.lokal]||""):"svi"}</td><td class="r"><button class="x" data-invdel="${esc(p.kod)}" aria-label="Poništi pozivnicu">×</button></td></tr>`), "")}</div>`:""}`
+    :`<p class="note">Korisnike i pozivnice uređuje vlasnik.</p>`}`);
+}
+
 /* ---------- podešavanja: PIN, rezervne kopije, izveštaj, obaveštenja ---------- */
 const META_LS = LS+"-meta", PIN_LS = LS+"-pin";
 const meta = () => { try{ return JSON.parse(localStorage.getItem(META_LS)||"{}"); }catch(e){ return {}; } };
@@ -1639,6 +1860,7 @@ function viewPodesavanja(){
   const p = pinInfo(), m = meta(), android = !!window.AndroidBridge;
   const notifOn = bridge("notificationsEnabled") ? window.AndroidBridge.notificationsEnabled() : false;
   return `
+  ${cloudPanel()}
   ${panel("PIN za otključavanje", p
     ? `<p class="note" style="margin-top:0">PIN je uključen (${p.len} cifara). Aplikacija se zaključava pri pokretanju i kad je ne koristite duže od minut.</p>
       <form class="entry" id="f-pinoff"><div class="field"><label for="pin-cur">Trenutni PIN</label><input id="pin-cur" type="password" inputmode="numeric" maxlength="6" autocomplete="off" required></div>
@@ -1674,10 +1896,11 @@ function renderChrome(){
     gotovina: state.gotovina.filter(g=>g.status!=="isplaceno").length,
     zadaci: state.zadaci.filter(z=>!z.gotovo).length
   };
-  $("#nav").innerHTML = NAV.map(([g,keys])=>`<div class="navgrp">${g}</div>`+keys.map(k=>`<button data-tab="${k}" ${ui.tab===k?'aria-current="page"':""}>${icon(k)}${TABS[k][0]}${cnt[k]?`<span class="cnt ${k==="zadaci"?"n":""}">${cnt[k]}</span>`:""}</button>`).join("")).join("");
-  $("#bottomnav").innerHTML = BOTTOM.map(k=>`<button data-tab="${k}" ${ui.tab===k?'aria-current="page"':""}>${icon(k)}${k==="dugovi"?"Dugovi":TABS[k][0]}</button>`).join("")
-    + `<button data-drawer ${BOTTOM.includes(ui.tab)?"":'aria-current="page"'}>${icon("meni")}Više</button>`;
+  $("#nav").innerHTML = NAV.map(([g,all])=>{ const keys = all.filter(allowedTab); return !keys.length ? "" : `<div class="navgrp">${g}</div>`+keys.map(k=>`<button data-tab="${k}" ${ui.tab===k?'aria-current="page"':""}>${icon(k)}${TABS[k][0]}${cnt[k]?`<span class="cnt ${k==="zadaci"?"n":""}">${cnt[k]}</span>`:""}</button>`).join(""); }).join("");
+  $("#bottomnav").innerHTML = (cloud.uloga==="smena" ? ["pazar","troskovi","zadaci"] : BOTTOM).map(k=>`<button data-tab="${k}" ${ui.tab===k?'aria-current="page"':""}>${icon(k)}${k==="dugovi"?"Dugovi":TABS[k][0]}</button>`).join("")
+    + `<button data-drawer ${(cloud.uloga==="smena" ? ["pazar","troskovi","zadaci"] : BOTTOM).includes(ui.tab)?"":'aria-current="page"'}>${icon("meni")}Više</button>`;
   $("#title").textContent = TABS[ui.tab][0]; $("#subtitle").textContent = TABS[ui.tab][1];
+  $("#firmname").textContent = cloud.firma ? (cloud.naziv||"Firma") : "Moji lokali"; setCloudStatus();
   $("#quickl").textContent = QUICK[ui.tab][0];
   const al = alerts(), bn = $("#belln"); bn.hidden = !al.length; bn.textContent = al.length;
   $("#alerts").hidden = !ui.alerts;
@@ -1743,6 +1966,12 @@ document.addEventListener("click", e=>{
   if (b.dataset.dodel){ const id=b.dataset.dodel; ui.confirm=null; removeWithUndo([["dobavljaci", x=>x.id===id]], "Dobavljač obrisan"); return; }
   if (b.dataset.delrad){ const id=b.dataset.delrad; ui.confirm=null; removeWithUndo([["radnici", x=>x.id===id]], "Radnik obrisan"); return; }
   if (b.hasAttribute("data-undo")){ undoDelete(); return; }
+  if (b.dataset.authmode){ cloud.mode=b.dataset.authmode; render(); return; }
+  if (b.hasAttribute("data-signout")){ ui.confirm=null; signOut(); return; }
+  if (b.dataset.mdel){ const k=b.dataset.mdel; ui.confirm=null;
+    cloud.sb.from("clanovi").delete().eq("firma",cloud.firma).eq("korisnik",k).then(({error})=>{ toast(error?"Nije uklonjen: "+error.message:"Korisnik uklonjen"); loadMembers(); }); return; }
+  if (b.dataset.invdel){ cloud.sb.from("pozivnice").delete().eq("kod",b.dataset.invdel).then(()=>{ if (cloud.newCode===b.dataset.invdel) cloud.newCode=""; loadMembers(); }); return; }
+  if (b.dataset.copycode){ const t=b.dataset.copycode; (navigator.clipboard?navigator.clipboard.writeText(t):Promise.reject()).then(()=>toast("Kod je kopiran"),()=>toast("Kod: "+t)); return; }
   if (b.hasAttribute("data-excel")){ ui.repMonth = $("#rep-month").value || prevMonth(thisMonth()); exportExcel(ui.repMonth); return; }
   if (b.hasAttribute("data-autonow")){ setMeta({auto:0}); autoBackup(); render(); return; }
   if (b.hasAttribute("data-notifon")){ if (bridge("requestNotifications")) window.AndroidBridge.requestNotifications(); setTimeout(render, 4000); return; }
@@ -1782,6 +2011,9 @@ document.addEventListener("change", e=>{
   const el=e.target;
   if (el.id==="month"){ ui.month = el.value || thisMonth(); render(); return; }
   if (el.dataset.task){ const z=state.zadaci.find(x=>x.id===el.dataset.task); if(z){ const {id,...rest}=z; put("zadaci",id,{...rest,gotovo:el.checked,zavrseno:el.checked?Date.now():null}); } return; }
+  if (el.dataset.mrole || el.dataset.mlokal){ const k=el.dataset.mrole||el.dataset.mlokal, patch=el.dataset.mrole?{uloga:el.value}:{lokal:+el.value};
+    if (patch.uloga==="smena"){ const m=cloud.members.find(x=>x.korisnik===k); if (m && m.lokal==null) patch.lokal=0; }
+    cloud.sb.from("clanovi").update(patch).eq("firma",cloud.firma).eq("korisnik",k).then(({error})=>{ toast(error?"Izmena nije sačuvana: "+error.message:"Sačuvano"); loadMembers(); }); return; }
   if (el.dataset.pick!==undefined){ const p=pracenje(), k=ui.picker, v=el.dataset.pick; let list=p[k].filter(x=>x!==v);
     if (el.checked){ if (list.length>=MAX_PICK){ el.checked=false; toast(`Najviše ${MAX_PICK} stavki`); return; } list.push(v); }
     put("settings","pracenje",{...p,[k]:list}); return; }
@@ -1849,6 +2081,17 @@ document.addEventListener("submit", async e=>{
     await put("imenik",uid(),{ime:val("k-ime"),tel:val("k-tel"),napomena:val("k-nap"),kreirano:Date.now()});
     clear("k-ime","k-tel","k-nap"); toast("Kontakt dodat"); render(); }
   else if (f.id==="f-edit"){ saveEdit(); }
+  else if (f.id==="f-cloudcfg"){ const url=val("cc-url").replace(/\/+$/,""), key=val("cc-key");
+    if (!/^https:\/\/[a-z0-9-]+\.supabase\.(co|in)$/i.test(url)){ toast("Adresa treba da izgleda kao https://xxxx.supabase.co"); return; }
+    setCloudCfg({url, key}); render(); await cloudInit(); }
+  else if (f.id==="f-auth"){ const btn=f.querySelector("button"); btn.disabled=true;
+    try{ if (cloud.mode==="signup") await signUp(val("au-email"), $("#au-pass").value, val("au-ime")); else await signIn(val("au-email"), $("#au-pass").value); }
+    finally{ if (btn.isConnected) btn.disabled=false; } }
+  else if (f.id==="f-firma"){ f.querySelector("button").disabled=true; await createFirm(val("fi-naziv")); }
+  else if (f.id==="f-join"){ f.querySelector("button").disabled=true; await joinFirm(val("jo-kod"), val("jo-ime")); render(); }
+  else if (f.id==="f-poziv"){ const uloga=val("po-uloga");
+    const {data:k, error} = await cloud.sb.rpc("napravi_pozivnicu", {f:cloud.firma, uloga, lokal:uloga==="smena"?+val("po-lokal"):null, ime:val("po-ime")});
+    if (error){ toast(AUTH_ERR(error.message)); return; } cloud.newCode=k; clear("po-ime"); await loadMembers(); render(); }
   else if (f.id==="f-pin"){ const a=val("pin-1"), b2=val("pin-2");
     if (!/^\d{4,6}$/.test(a)){ toast("PIN mora imati 4 do 6 cifara"); return; } if (a!==b2){ toast("PIN-ovi se ne poklapaju"); return; }
     localStorage.setItem(PIN_LS, JSON.stringify({h:await pinHash(a), len:a.length})); clear("pin-1","pin-2"); render(); toast("PIN je uključen"); }
@@ -1876,8 +2119,16 @@ document.addEventListener("submit", async e=>{
 });
 
 /* ---------- boot ---------- */
-lsLoad(); render(); showLock();
-refreshRates(false); refreshInfo(false); autoBackup(); syncReminders();
+lsLoad();
+// Offline start: keep working (and queueing) as the firm's member until the base answers.
+{ let c = {}; try{ c = JSON.parse(localStorage.getItem(CLOUD_LS)||"{}"); }catch(e){}
+  if (c.firma) Object.assign(cloud, {firma:c.firma, lastSync:c.lastSync||"", uloga:c.uloga||null, lokal:c.lokal??null, naziv:c.naziv||""}); }
+if (!allowedTab(ui.tab)) ui.tab = "pazar";
+render(); showLock();
+refreshRates(false); refreshInfo(false); autoBackup(); syncReminders(); cloudInit();
+window.addEventListener("online", ()=>{ setCloudStatus("ok"); flush(); pullChanges(); });
+window.addEventListener("offline", ()=>setCloudStatus("offline"));
+setInterval(()=>{ if (!document.hidden && cloud.user){ flush(); pullChanges(); } }, 60e3);
 document.addEventListener("visibilitychange", ()=>{
   if (document.hidden){ lockUi.hiddenAt = Date.now(); return; }
   if (pinInfo() && lockUi.hiddenAt && Date.now()-lockUi.hiddenAt > 60e3) showLock();

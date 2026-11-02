@@ -19,6 +19,12 @@ Podaci se čuvaju samo u pregledaču na tom uređaju.
   (`.github/workflows/info.yml`) u `info.json` na grani `info`; aplikacija ga čita sa raw.githubusercontent.com.
   GitHub gasi zakazane poslove posle 60 dana bez izmena u repozitorijumu – tada ga ponovo uključite u Actions.
 
+## Zajednička baza (više korisnika)
+
+Bez baze sve radi samo na telefonu. Sa Supabase bazom (`supabase/setup.sql`, uputstvo u `supabase/UPUTSTVO.md`)
+više ljudi radi u istoj knjizi, sa ulogama vlasnik / menadžer / smena. Telefon i dalje radi bez interneta; izmene se
+šalju kad se veza vrati, a izmene drugih stižu odmah. Kurs, grad za vreme i izbor berze/kripta ostaju po uređaju.
+
 ## Asistent
 
 Ugrađeni asistent odgovara na pitanja o knjizi (dug prema dobavljaču, avansi radnika, pazar, troškovi, gotovina,
