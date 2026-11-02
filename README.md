@@ -12,6 +12,13 @@ Izmene u `www/` se automatski objavljuju na GitHub Pages (`.github/workflows/web
 https://jevrajevremovic-dotcom.github.io/Knjiga-lokala/
 Podaci se čuvaju samo u pregledaču na tom uređaju.
 
+## Vreme, berza, kripto i vesti (Pregled)
+
+- Vreme (Open-Meteo) i kripto (CoinGecko) aplikacija preuzima direktno.
+- Vesti (N1, Danas, BBC na srpskom) i berzu (Yahoo Finance) skuplja `scripts/info.py` svakih sat vremena
+  (`.github/workflows/info.yml`) u `info.json` na grani `info`; aplikacija ga čita sa raw.githubusercontent.com.
+  GitHub gasi zakazane poslove posle 60 dana bez izmena u repozitorijumu – tada ga ponovo uključite u Actions.
+
 ## Struktura
 
 - `www/` – sama aplikacija (HTML/JS). Može se probati i u pregledaču: `powershell -File serve.ps1`, pa otvoriti http://localhost:8080

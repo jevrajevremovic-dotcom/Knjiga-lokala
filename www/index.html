@@ -240,13 +240,40 @@ details.past[open] summary::before{transform:rotate(90deg)}
 .fx-row .code{font-weight:700}
 .fx-row .nm{font-size:12.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .fx-row input{padding:6px 9px}
-.fx-mini{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
-.fx-mini div{background:var(--field);border:1px solid var(--line);border-radius:10px;padding:9px 11px}
-.fx-mini b{display:block;font-size:15px}
-.fx-mini span{font-size:12px;color:var(--muted)}
 .calc{display:grid;grid-template-columns:minmax(0,1fr) 84px;gap:8px;margin-top:14px}
 .calc .out{grid-column:1/-1;font-size:16px;font-weight:600}
 .note{font-size:12.5px;color:var(--muted);margin:10px 0 0}
+
+/* info: vreme, kurs, berza, kripto, vesti */
+.info{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,.9fr) minmax(0,1.2fr) minmax(0,1.2fr);gap:16px}
+.icard{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:16px;min-width:0;display:flex;flex-direction:column;gap:10px}
+.icard .hd{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.icard .hd b{font-size:11.5px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.07em}
+.icard .hd small{font-size:11.5px;color:var(--dim);text-align:right}
+.icard.wx{background:radial-gradient(120% 120% at 100% 0%,rgba(96,165,250,.22),transparent 60%),var(--surface)}
+.wx-now{display:flex;align-items:center;gap:12px}
+.wx-now .em{font-size:40px;line-height:1}
+.wx-now .t{font-size:32px;font-weight:700;letter-spacing:-.02em}
+.wx-now .d{font-size:12.5px;color:var(--muted)}
+.wx-days{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
+.wx-days div{background:var(--field);border:1px solid var(--line);border-radius:9px;padding:6px 4px;text-align:center;font-size:12px;color:var(--muted)}
+.wx-days b{display:block;color:var(--fg);font-size:12.5px;font-weight:600}
+.wx-city{display:flex;gap:6px}
+.wx-city input{padding:6px 9px;font-size:13px}
+.qrow{display:grid;grid-template-columns:minmax(0,1fr) 56px auto;gap:8px;align-items:center;font-size:13px;padding:5px 0;border-bottom:1px solid var(--line)}
+.qrow:last-child{border-bottom:0}
+.qrow.k{grid-template-columns:minmax(0,1fr) auto}
+.qrow .n{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600}
+.qrow .n small{display:block;color:var(--dim);font-size:11px;font-weight:400}
+.qrow svg{width:56px;height:22px;display:block}
+.qrow .p{text-align:right;font-weight:600}
+.qrow .p small{display:block;font-size:11.5px}
+.news{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:20px}
+.nitem{display:block;padding:9px 0;border-bottom:1px solid var(--line);color:var(--fg);text-decoration:none}
+.nitem:last-child{border-bottom:0}
+.nitem:hover b{color:var(--primary-hi)}
+.nitem b{font-weight:500;font-size:13.5px;line-height:1.35;display:block}
+.nitem small{color:var(--dim);font-size:11.5px}
 
 .backup{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
 .backup p{flex-basis:100%;margin:0 0 4px;color:var(--muted);font-size:13.5px}
@@ -257,7 +284,7 @@ details.past[open] summary::before{transform:rotate(90deg)}
 .bottomnav{display:none}
 
 @media (max-width:1180px){
-  .kpis,.stats{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .kpis,.stats,.info{grid-template-columns:repeat(2,minmax(0,1fr))}
   .grid-main{grid-template-columns:minmax(0,1fr)}
 }
 @media (max-width:900px){
@@ -283,6 +310,7 @@ details.past[open] summary::before{transform:rotate(90deg)}
   .quick{padding:9px 11px}
   .ttl small{display:none}
   .lokali{grid-template-columns:minmax(0,1fr)}
+  .info,.news{grid-template-columns:minmax(0,1fr)}
   .kpis,.stats{gap:10px}
   .kc{padding:12px 12px 0;min-height:118px}
   .kc .v{font-size:19px;white-space:normal;overflow-wrap:anywhere}
@@ -595,10 +623,86 @@ function recent(){
   return it.length ? it.map(x=>`<div class="act c-${x.c}"><span class="ic">${icon(x.ic)}</span><div class="tx"><b>${esc(x.t)}</b><small>${esc(x.s)}</small></div><span class="am num ${x.cls||""}">${x.a}</span></div>`).join("")
     : `<div class="empty">Ovde će se pojaviti poslednji unosi.</div>`;
 }
-function fxMini(){
-  const s=settings();
-  return `<div class="fx-mini">${["EUR","USD","CHF","GBP"].map(c=>`<div><span>${c}</span><b class="num">${s.kurs[c]?fmt(parseNum(s.kurs[c]),4):"—"}</b></div>`).join("")}</div>
-    <p class="note">${s.kursDatum?"NBS srednji kurs · "+fdate(s.kursDatum):"Kurs još nije preuzet."}</p>`;
+/* ---------- home page info: weather, markets, crypto, news ----------
+   Weather (Open-Meteo) and crypto (CoinGecko) come straight from their APIs. News and stock quotes are collected
+   hourly by .github/workflows/info.yml into info.json, because those sites do not allow cross-site requests.
+   Kept in a separate localStorage key so it never ends up in backups. */
+const INFO_URL = "https://raw.githubusercontent.com/jevrajevremovic-dotcom/Knjiga-lokala/info/info.json";
+const INFO_LS = LS+"-info";
+const info = {wx:null, wxAt:0, wxFor:"", crypto:null, cryptoAt:0, feed:null, feedAt:0};
+try{ Object.assign(info, JSON.parse(localStorage.getItem(INFO_LS)||"{}")); }catch(e){}
+const grad = () => state.settings.find(x=>x.id==="grad") || {ime:"Beograd", lat:44.8125, lon:20.4612};
+const getJSON = url => fetch(url,{cache:"no-store"}).then(r=>{ if(!r.ok) throw new Error(r.status); return r.json(); });
+let infoLoading = false;
+async function refreshInfo(force){
+  if (infoLoading) return; const now = Date.now(), g = grad(), jobs = [];
+  if (force || !info.wx || now-info.wxAt > 30*60e3 || info.wxFor !== g.ime)
+    jobs.push(getJSON(`https://api.open-meteo.com/v1/forecast?latitude=${g.lat}&longitude=${g.lon}&current=temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m,weather_code&daily=weather_code,temperature_2m_max,temperature_2m_min&timezone=auto&forecast_days=4`)
+      .then(j=>{ info.wx=j; info.wxAt=now; info.wxFor=g.ime; }));
+  if (force || now-info.cryptoAt > 10*60e3)
+    jobs.push(getJSON("https://api.coingecko.com/api/v3/coins/markets?vs_currency=eur&ids=bitcoin,ethereum,binancecoin,solana,ripple&sparkline=true&price_change_percentage=24h")
+      .then(j=>{ if (!Array.isArray(j)) return; info.cryptoAt=now;
+        info.crypto = j.map(c=>({sym:String(c.symbol).toUpperCase(), name:c.name, price:c.current_price, pct:c.price_change_percentage_24h,
+          spark:((c.sparkline_in_7d&&c.sparkline_in_7d.price)||[]).filter((_,i,a)=>i%4===0||i===a.length-1)})); }));
+  if (force || now-info.feedAt > 15*60e3)
+    jobs.push(getJSON(INFO_URL+"?t="+Math.floor(now/300000)).then(j=>{ info.feed=j; info.feedAt=now; }));
+  if (!jobs.length) return;
+  infoLoading = true;
+  const res = await Promise.allSettled(jobs); infoLoading = false;
+  try{ localStorage.setItem(INFO_LS, JSON.stringify(info)); }catch(e){}
+  if (force && res.some(r=>r.status==="rejected")) toast("Deo podataka nije preuzet. Proverite internet.");
+  if (ui.tab==="pregled") render();
+}
+const WMO = c => c===0?["☀️","Vedro"]:c<=2?["🌤️","Delimično oblačno"]:c===3?["☁️","Oblačno"]:c<=48?["🌫️","Magla"]:c<=57?["🌦️","Rosulja"]:
+  c<=67?["🌧️","Kiša"]:c<=77?["🌨️","Sneg"]:c<=82?["🌦️","Pljuskovi"]:c<=86?["🌨️","Snežni pljuskovi"]:["⛈️","Grmljavina"];
+const DAYS = ["ned","pon","uto","sre","čet","pet","sub"];
+const ago = iso => { const m = Math.round((Date.now()-new Date(iso))/60000); if (!(m>=0)) return "";
+  return m<1?"upravo":m<60?`pre ${m} min`:m<1440?`pre ${Math.floor(m/60)} h`:fdate(iso.slice(0,10)); };
+// Colored by the change shown next to it, so line and percentage never disagree.
+function mspark(vals, pct){
+  if (!vals || vals.length<2) return `<svg viewBox="0 0 56 22"></svg>`;
+  const max=Math.max(...vals), min=Math.min(...vals), span=(max-min)||1, up=pct!=null ? pct>=0 : vals[vals.length-1]>=vals[0];
+  const pts = vals.map((v,i)=>`${(i/(vals.length-1)*56).toFixed(1)},${(20-(v-min)/span*18).toFixed(1)}`).join(" ");
+  return `<svg viewBox="0 0 56 22" preserveAspectRatio="none" aria-hidden="true"><polyline points="${pts}" fill="none" stroke="${up?"#34D399":"#F87171"}" stroke-width="1.6" vector-effect="non-scaling-stroke"/></svg>`;
+}
+const pctTxt = p => p==null ? "" : `<small class="${p>=0?"pos":"neg"}">${p>=0?"+":"−"}${fmt(Math.abs(p))}%</small>`;
+function wxCard(){
+  const w = info.wx, g = grad();
+  const cityForm = ui.cityEdit ? `<form class="wx-city" id="f-grad"><input id="grad-ime" placeholder="npr. Novi Sad" required aria-label="Grad"><button class="btn small" type="submit">OK</button></form>` : "";
+  const hd = `<div class="hd"><b>Vreme · ${esc(g.ime)}</b><button class="link" data-cityedit>${ui.cityEdit?"Otkaži":"Promeni grad"}</button></div>`;
+  if (!w || !w.current) return `<div class="icard wx">${hd}${cityForm}<div class="empty">Prognoza se učitava…</div></div>`;
+  const c = w.current, [em, tx] = WMO(c.weather_code), d = w.daily || {};
+  return `<div class="icard wx">${hd}${cityForm}
+    <div class="wx-now"><span class="em">${em}</span><div><div class="t num">${Math.round(c.temperature_2m)}°</div><div class="d">${tx} · oseća se ${Math.round(c.apparent_temperature)}°</div></div></div>
+    <div class="d" style="font-size:12.5px;color:var(--muted)">Vlažnost ${Math.round(c.relative_humidity_2m)}% · vetar ${Math.round(c.wind_speed_10m)} km/h</div>
+    <div class="wx-days">${(d.time||[]).slice(1,4).map((t,i)=>`<div>${DAYS[new Date(t+"T12:00:00").getDay()]}<b>${WMO(d.weather_code[i+1])[0]} ${Math.round(d.temperature_2m_max[i+1])}°</b>${Math.round(d.temperature_2m_min[i+1])}°</div>`).join("")}</div>
+  </div>`;
+}
+function kursCard(){
+  const s = settings();
+  return `<div class="icard"><div class="hd"><b>Kurs NBS</b><small>${s.kursDatum?fdate(s.kursDatum):"nije preuzet"}</small></div>
+    <div>${[["EUR","Evro"],["USD","Dolar"],["CHF","Franak"],["GBP","Funta"],["BAM","Marka"]].map(([c,n])=>`<div class="qrow k"><span class="n">${c}<small>${n}</small></span><span class="p num">${s.kurs[c]?fmt(parseNum(s.kurs[c]),4):"—"}</span></div>`).join("")}</div>
+    <button class="link" data-tab="kurs" style="align-self:flex-start">Kursna lista i preračun</button></div>`;
+}
+function berzaCard(){
+  const b = info.feed && info.feed.berza;
+  return `<div class="icard"><div class="hd"><b>Berza</b><small>${info.feed?ago(info.feed.azurirano):""}</small></div>
+    ${b && b.length ? `<div>${b.map(q=>`<div class="qrow"><span class="n">${esc(q.naziv)}<small>${esc(q.simbol)}</small></span>${mspark(q.istorija,q.promena)}<span class="p num">${q.cena!=null?fmt(q.cena):"—"} ${pctTxt(q.promena)}</span></div>`).join("")}</div>`
+      : `<div class="empty">Podaci sa berze se učitavaju…</div>`}</div>`;
+}
+function kriptoCard(){
+  const c = info.crypto;
+  return `<div class="icard"><div class="hd"><b>Kripto · EUR</b><small>${info.cryptoAt?ago(new Date(info.cryptoAt).toISOString()):""}</small></div>
+    ${c && c.length ? `<div>${c.map(x=>`<div class="qrow"><span class="n">${esc(x.sym)}<small>${esc(x.name)}</small></span>${mspark(x.spark,x.pct)}<span class="p num">${fmt(x.price, x.price<10?4:2)} ${pctTxt(x.pct)}</span></div>`).join("")}</div>`
+      : `<div class="empty">Cene kriptovaluta se učitavaju…</div>`}</div>`;
+}
+function newsPanel(){
+  const v = info.feed && info.feed.vesti;
+  const col = (t, arr) => `<div><div class="sec-title" style="margin-bottom:2px">${t}</div>${arr && arr.length
+    ? arr.filter(n=>/^https?:\/\//.test(n.link)).slice(0,7).map(n=>`<a class="nitem" href="${esc(n.link)}" target="_blank" rel="noopener"><b>${esc(n.naslov)}</b><small>${esc(n.izvor)}${n.vreme?" · "+ago(n.vreme):""}</small></a>`).join("")
+    : `<div class="empty">Vesti se učitavaju…</div>`}</div>`;
+  return panel("Vesti", `<div class="news">${col("Srbija", v&&v.srbija)}${col("Svet", v&&v.svet)}</div>`,
+    `<button class="btn ghost small" data-inforefresh>↻ Osveži</button>`);
 }
 
 /* ---------- views ---------- */
@@ -623,6 +727,7 @@ function viewPregled(){
   const supp = state.dobavljaci.map(d=>({d,x:supplierDebt(d.id)})).filter(o=>o.x.racuni.length).sort((a,b)=>b.x.rsd-a.x.rsd).slice(0,6);
   const openT = state.zadaci.filter(z=>!z.gotovo);
   return `
+  <div class="info">${wxCard()}${kursCard()}${berzaCard()}${kriptoCard()}</div>
   <div class="toolbar" style="justify-content:space-between">${monthBar()}<span class="label">Danas: ${fdate(t)}</span></div>
   <div class="kpis">
     <div class="kc"><div class="top"><span class="t">Pazar · ${MONTHS[+m.slice(5)-1]}</span>${pct(mp,pp)}</div><div class="v num">${fmt0(mp)}<small>RSD</small></div><div class="h">Danas: ${fmt0(todayP)} RSD</div>${spark(pd,"#60A5FA")}</div>
@@ -644,16 +749,14 @@ function viewPregled(){
     <div class="st c-blue"><span class="ic">${icon("radnici")}</span><div><b class="num">${fmt0(plate)}</b><span>Plate · ${act.length} radnik(a)</span></div></div>
     <div class="st c-orange"><span class="ic">${icon("zadaci")}</span><div><b class="num">${openT.length}</b><span>Otvorenih zadataka</span></div></div>
   </div>
+  ${newsPanel()}
   ${panel("Dobavljači", table(["Dobavljač","Računi","Najbliži rok","Status",">Dug"], supp.map(({d,x})=>{
       const roks = x.racuni.map(r=>r.dospece).filter(Boolean).sort(); const lateR = x.rsd>0.5 && roks.some(r=>r<t);
       const st = x.rsd<=0.5 ? `<span class="pill c-green">Plaćeno</span>` : lateR ? `<span class="pill c-red">Kasni</span>` : `<span class="pill c-orange">Otvoreno</span>`;
       return `<tr><td><b>${esc(d.naziv)}</b></td><td class="mut">${x.racuni.length}</td><td class="mut">${roks.length?fdate(x.rsd>0.5?(roks.find(r=>r>=t)||roks[roks.length-1]):roks[roks.length-1]):"–"}</td><td>${st}</td><td class="r num"><b>${fmt(x.rsd)}</b></td></tr>`; }),
     "Još nema računa dobavljača."), `<button class="link" data-tab="dugovi">Svi dobavljači</button>`)}
-  <div class="grid-main">
-    ${panel("Sledeće rate", table(["Naziv","Vrsta","Sledeća rata",">Rata",">Preostalo"], nextL.slice(0,6).map(o=>`<tr><td><b>${esc(o.naziv)}</b><br><small class="mut">${esc(o.opis)}</small></td><td><span class="pill ${o._t==="krediti"?"c-purple":"c-orange"}">${o._t==="krediti"?"Kredit":"Lizing"}</span></td><td>${fdate(o.p.next)}</td><td class="r num">${fmt(o.rata)} ${esc(o.valuta||"RSD")}</td><td class="r num">${o.p.n} rata<br><small class="mut">${fmt0(o.p.ostalo)} ${esc(o.valuta||"RSD")}</small></td></tr>`),
+  ${panel("Sledeće rate", table(["Naziv","Vrsta","Sledeća rata",">Rata",">Preostalo"], nextL.slice(0,6).map(o=>`<tr><td><b>${esc(o.naziv)}</b><br><small class="mut">${esc(o.opis)}</small></td><td><span class="pill ${o._t==="krediti"?"c-purple":"c-orange"}">${o._t==="krediti"?"Kredit":"Lizing"}</span></td><td>${fdate(o.p.next)}</td><td class="r num">${fmt(o.rata)} ${esc(o.valuta||"RSD")}</td><td class="r num">${o.p.n} rata<br><small class="mut">${fmt0(o.p.ostalo)} ${esc(o.valuta||"RSD")}</small></td></tr>`),
       "Nema unetih kredita ni lizinga."), `<button class="link" data-tab="krediti">Svi krediti</button>`)}
-    ${panel("Kursna lista", fxMini(), `<button class="link" data-tab="kurs">Cela lista</button>`)}
-  </div>
   <div class="grid2">
     ${panel("Troškovi po vrsti", catsBlock(by), `<span class="sub num">${fmt(mc)} RSD</span>`)}
     ${panel("Otvoreni zadaci", (openT.length?openT.slice(0,6).map(taskRow).join(""):`<div class="empty">Sve je završeno.</div>`), `<button class="link" data-tab="zadaci">Svi zadaci</button>`)}
@@ -1008,6 +1111,8 @@ document.addEventListener("click", e=>{
   if (b.hasAttribute("data-showdone")){ ui.showDone=!ui.showDone; render(); return; }
   if (b.hasAttribute("data-export")){ exportBackup(); return; }
   if (b.hasAttribute("data-fxrefresh")){ refreshRates(true); return; }
+  if (b.hasAttribute("data-inforefresh")){ refreshInfo(true); refreshRates(true); return; }
+  if (b.hasAttribute("data-cityedit")){ ui.cityEdit=!ui.cityEdit; render(); if(ui.cityEdit) $("#grad-ime")?.focus(); return; }
 });
 $("#scrim").addEventListener("click", ()=>$("#app").classList.remove("drawer"));
 document.addEventListener("keydown", e=>{
@@ -1080,6 +1185,11 @@ document.addEventListener("submit", async e=>{
   else if (f.id==="f-kon"){
     await put("imenik",uid(),{ime:val("k-ime"),tel:val("k-tel"),napomena:val("k-nap"),kreirano:Date.now()});
     clear("k-ime","k-tel","k-nap"); toast("Kontakt dodat"); render(); }
+  else if (f.id==="f-grad"){ const q=val("grad-ime"); if(!q) return;
+    try{ const j=await getJSON("https://geocoding-api.open-meteo.com/v1/search?count=1&language=sr&name="+encodeURIComponent(q)); const r=j.results&&j.results[0];
+      if (!r){ toast("Grad nije pronađen"); return; }
+      ui.cityEdit=false; await put("settings","grad",{ime:r.name, lat:r.latitude, lon:r.longitude}); refreshInfo(false); toast("Grad: "+r.name);
+    }catch(err){ toast("Pretraga grada nije uspela. Proverite internet."); } }
   else if (f.id==="f-zad"){ const t=val("z-tekst"); if(!t) return;
     await put("zadaci",uid(),{tekst:t,rok:val("z-rok"),prioritet:val("z-prio"),gotovo:false,kreirano:Date.now()});
     clear("z-tekst","z-rok"); toast("Zadatak dodat"); render(); }
@@ -1088,8 +1198,9 @@ document.addEventListener("submit", async e=>{
 
 /* ---------- boot ---------- */
 lsLoad(); render();
-refreshRates(false);
-document.addEventListener("visibilitychange", ()=>{ if (!document.hidden) refreshRates(false); });
+refreshRates(false); refreshInfo(false);
+document.addEventListener("visibilitychange", ()=>{ if (!document.hidden){ refreshRates(false); refreshInfo(false); } });
+setInterval(()=>{ if (!document.hidden) refreshInfo(false); }, 5*60e3);
 if ("serviceWorker" in navigator && location.protocol === "https:" && !window.AndroidBridge) navigator.serviceWorker.register("sw.js").catch(()=>{});
 })();
 </script>
