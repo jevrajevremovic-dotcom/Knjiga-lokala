@@ -1,0 +1,42 @@
+name: Vesti i berza
+
+# Hourly: collect headlines and market quotes into info.json on the `info` branch.
+# The app reads it from raw.githubusercontent.com (allowed from any site).
+on:
+  schedule:
+    - cron: "17 * * * *"
+  push:
+    branches: [main]
+    paths: ["scripts/info.py", ".github/workflows/info.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: info
+  cancel-in-progress: true
+
+jobs:
+  info:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Skupi vesti i berzu
+        run: python scripts/info.py "$RUNNER_TEMP/info.json"
+
+      # The branch keeps a single commit, so hourly updates do not grow the repository.
+      - name: Objavi na grani info
+        run: |
+          cd "$RUNNER_TEMP"
+          rm -rf pub && mkdir pub && cd pub
+          git init -q -b info
+          cp ../info.json .
+          git add info.json
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" commit -q -m "Vesti i berza"
+          git push -q --force "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" info
