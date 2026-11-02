@@ -29,13 +29,43 @@ NEWS = {
 }
 NEWS_PER_SECTION = 14
 
+# The whole catalog is collected; each user picks in the app which of these to follow.
 MARKETS = [
-    ("^GSPC", "S&P 500"),
-    ("^IXIC", "Nasdaq"),
-    ("^DJI", "Dow Jones"),
-    ("^GDAXI", "DAX"),
-    ("GC=F", "Zlato"),
-    ("BZ=F", "Nafta Brent"),
+    ("^GSPC", "S&P 500", "Indeksi"),
+    ("^IXIC", "Nasdaq", "Indeksi"),
+    ("^DJI", "Dow Jones", "Indeksi"),
+    ("^GDAXI", "DAX (Nemačka)", "Indeksi"),
+    ("^FTSE", "FTSE 100 (V. Britanija)", "Indeksi"),
+    ("^FCHI", "CAC 40 (Francuska)", "Indeksi"),
+    ("^STOXX50E", "Euro Stoxx 50", "Indeksi"),
+    ("^ATX", "ATX (Austrija)", "Indeksi"),
+    ("^N225", "Nikkei 225 (Japan)", "Indeksi"),
+    ("^HSI", "Hang Seng (Hong Kong)", "Indeksi"),
+    ("GC=F", "Zlato", "Roba"),
+    ("SI=F", "Srebro", "Roba"),
+    ("BZ=F", "Nafta Brent", "Roba"),
+    ("CL=F", "Nafta WTI", "Roba"),
+    ("NG=F", "Prirodni gas", "Roba"),
+    ("KC=F", "Kafa", "Roba"),
+    ("CC=F", "Kakao", "Roba"),
+    ("SB=F", "Šećer", "Roba"),
+    ("ZW=F", "Pšenica", "Roba"),
+    ("ZC=F", "Kukuruz", "Roba"),
+    ("AAPL", "Apple", "Akcije"),
+    ("MSFT", "Microsoft", "Akcije"),
+    ("NVDA", "Nvidia", "Akcije"),
+    ("AMZN", "Amazon", "Akcije"),
+    ("GOOGL", "Alphabet (Google)", "Akcije"),
+    ("META", "Meta (Facebook)", "Akcije"),
+    ("TSLA", "Tesla", "Akcije"),
+    ("KO", "Coca-Cola", "Akcije"),
+    ("PEP", "PepsiCo", "Akcije"),
+    ("MCD", "McDonald's", "Akcije"),
+    ("SBUX", "Starbucks", "Akcije"),
+    ("NESN.SW", "Nestlé", "Akcije"),
+    ("EURUSD=X", "EUR/USD", "Valute"),
+    ("EURCHF=X", "EUR/CHF", "Valute"),
+    ("GBPUSD=X", "GBP/USD", "Valute"),
 ]
 
 
@@ -105,9 +135,9 @@ def quote(symbol):
 
 def markets():
     out = []
-    for symbol, name in MARKETS:
+    for symbol, name, group in MARKETS:
         try:
-            out.append({"simbol": symbol, "naziv": name, **quote(symbol)})
+            out.append({"simbol": symbol, "naziv": name, "grupa": group, **quote(symbol)})
         except Exception as e:
             print(f"berza {symbol}: {e}", file=sys.stderr)
     return out
