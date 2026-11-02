@@ -1547,7 +1547,8 @@ function viewAsistent(){
    Every record is a row in `zapisi` (see supabase/setup.sql). The phone keeps working from its local copy;
    changes go into a queue that is sent when online, and other phones' changes arrive live (realtime) or on
    the next pull. Exchange rate, weather city and followed markets stay per device. */
-const CLOUD_DEFAULT = {url:"", key:""};   // the firm's project; entered in Podešavanja until it is built in here
+// The firm's Supabase project. The publishable key is public by design; access is enforced by the policies in supabase/setup.sql.
+const CLOUD_DEFAULT = {url:"https://esbdlrocnddircsrqppj.supabase.co", key:"sb_publishable_8J9oLn8QlbVJxT9klq-ZSA_rlCGhtIF"};
 const CLOUD_LS = LS+"-cloud", QUEUE_LS = LS+"-queue";
 const SB_URL = "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/+esm";
 const LOCAL_ONLY = new Set(["settings/kurs","settings/grad","settings/pracenje"]);
