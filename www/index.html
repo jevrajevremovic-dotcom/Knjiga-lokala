@@ -1629,10 +1629,14 @@ function setCloudStatus(st, msg){
 async function cloudInit(){
   const c = cloudCfg(); if (!c.url || !c.key) return;
   try{
+    // Opened from the "zaboravljena lozinka" e-mail: the link carries a one-time session for setting a new password.
+    const recovering = /type=recovery/.test(location.hash);
     const {createClient} = await import(SB_URL);
     cloud.sb = createClient(c.url, c.key, {auth:{persistSession:true, autoRefreshToken:true, storageKey:LS+"-auth"}});
+    cloud.sb.auth.onAuthStateChange((ev, s)=>{ cloud.user = s ? s.user : null;
+      if (ev==="PASSWORD_RECOVERY"){ ui.recovery = true; setTab("podesavanja"); } });
     const {data} = await cloud.sb.auth.getSession(); cloud.user = data.session ? data.session.user : null;
-    cloud.sb.auth.onAuthStateChange((ev, s)=>{ cloud.user = s ? s.user : null; });
+    if (recovering && cloud.user){ ui.recovery = true; ui.tab = "podesavanja"; }
     if (cloud.user) await loadMembership();
   }catch(e){ setCloudStatus("error", "Biblioteka za bazu nije učitana (internet?)"); }
   render();
@@ -1669,7 +1673,34 @@ async function loadMembers(){
 }
 const AUTH_ERR = m => /Invalid login/i.test(m) ? "Pogrešan mejl ili lozinka." : /already registered|already been registered/i.test(m) ? "Nalog sa tim mejlom već postoji. Prijavite se."
   : /Password should be/i.test(m) ? "Lozinka mora imati bar 6 znakova." : /Email not confirmed/i.test(m) ? "Potvrdite nalog preko linka koji je stigao na mejl."
-  : /valid email|invalid format/i.test(m) ? "Mejl adresa nije ispravna." : /Pozivnica ne važi/.test(m) ? "Pozivnica ne važi (iskorišćena, istekla ili pogrešno prepisana)." : m;
+  : /valid email|invalid format/i.test(m) ? "Mejl adresa nije ispravna." : /Pozivnica ne važi/.test(m) ? "Pozivnica ne važi (iskorišćena, istekla ili pogrešno prepisana)."
+  : /rate limit|only request this after/i.test(m) ? "Previše zahteva za mejl. Sačekajte malo, ili zamolite vlasnika da vam postavi novu lozinku."
+  : /should be different/i.test(m) ? "Nova lozinka mora biti drugačija od stare."
+  : /postavi_lozinku|PGRST202/i.test(m) ? "U bazi nedostaje funkcija za lozinke: pokrenite supabase/lozinka.sql u Supabase SQL Editoru." : m;
+const WEB_URL = "https://jevrajevremovic-dotcom.github.io/Knjiga-lokala/";
+// The e-mail link opens the web version, where the new password is set; it then works in the app too.
+async function sendReset(email){
+  const {error} = await cloud.sb.auth.resetPasswordForEmail(email, {redirectTo: WEB_URL});
+  if (error){ toast(AUTH_ERR(error.message)); return; }
+  cloud.mode = "login"; render();
+  toast("Ako nalog postoji, na mejl je poslat link za novu lozinku.");
+}
+async function setNewPassword(p1, p2){
+  if (p1.length < 6){ toast("Lozinka mora imati bar 6 znakova."); return; }
+  if (p1 !== p2){ toast("Lozinke se ne poklapaju."); return; }
+  const {error} = await cloud.sb.auth.updateUser({password:p1});
+  if (error){ toast(AUTH_ERR(error.message)); return; }
+  ui.recovery = false; ui.pwOpen = false;
+  if (/type=recovery/.test(location.hash)) history.replaceState(null, "", location.pathname + location.search);
+  if (!cloud.firma) await loadMembership();
+  render(); toast("Nova lozinka je sačuvana");
+}
+async function setMemberPassword(k, pass){
+  if (pass.length < 6){ toast("Lozinka mora imati bar 6 znakova."); return; }
+  const {error} = await cloud.sb.rpc("postavi_lozinku", {f:cloud.firma, korisnik_id:k, lozinka:pass});
+  if (error){ toast(AUTH_ERR(error.message + " " + (error.code||""))); return; }
+  ui.confirm = null; render(); toast("Nova lozinka je postavljena. Javite je radniku.");
+}
 async function signIn(email, pass){
   const {data, error} = await cloud.sb.auth.signInWithPassword({email, password:pass});
   if (error){ toast(AUTH_ERR(error.message)); return false; }
@@ -1718,6 +1749,15 @@ function cloudPanel(){
       <div class="field"><label for="cc-key">Publishable / anon key</label><input id="cc-key" placeholder="sb_publishable_… ili eyJ…" required></div>
       <button class="btn" type="submit">Poveži</button></form>`);
   if (!cloud.sb) return panel("Zajednička baza", `<div class="empty">Povezivanje sa bazom…</div>`);
+  const newPassForm = `<form class="entry" id="f-newpass">
+      <div class="field"><label for="np-1">Nova lozinka</label><input id="np-1" type="password" autocomplete="new-password" minlength="6" required></div>
+      <div class="field"><label for="np-2">Ponovite lozinku</label><input id="np-2" type="password" autocomplete="new-password" minlength="6" required></div>
+      <button class="btn" type="submit">Sačuvaj lozinku</button></form>`;
+  if (ui.recovery && cloud.user) return panel("Nova lozinka", `<p class="note" style="margin-top:0">Postavite novu lozinku za <b>${esc(cloud.user.email)}</b>. Posle toga se tom lozinkom prijavljujete i u aplikaciji na telefonu.</p>${newPassForm}`);
+  if (!cloud.user && cloud.mode==="reset") return panel("Zaboravljena lozinka", `<p class="note" style="margin-top:0">Upišite mejl naloga. Stići će link; otvorite ga, postavite novu lozinku, pa se njome prijavite ovde.</p>
+      <form class="addrow" id="f-reset" style="margin-top:0"><input id="rs-email" type="email" autocomplete="username" placeholder="mejl naloga" required><button class="btn" type="submit">Pošalji link</button></form>
+      <p class="note">Ako mejl ne stigne za nekoliko minuta (proverite i Spam), zamolite vlasnika da vam postavi novu lozinku: Podešavanja › Korisnici › Lozinka.</p>
+      <div class="toolbar"><button class="link" data-authmode="login">Nazad na prijavu</button></div>`);
   if (!cloud.user){
     const up = cloud.mode==="signup";
     return panel("Zajednička baza", `${cloud.firma?`<div class="banner" style="margin-bottom:12px"><span>Ovaj telefon je povezan sa firmom <b>${esc(cloud.naziv||"")}</b>, ali niste prijavljeni${queue.length?`; ${queue.length} izmena čeka slanje`:""}. Prijavite se istim nalogom.</span></div>`:""}<p class="note" style="margin-top:0">${up?"Novi nalog. Vlasnik posle prijave pravi firmu; radnici unose pozivnicu koju im pošalje vlasnik.":"Prijavite se nalogom za zajedničku bazu."}</p>
@@ -1726,7 +1766,7 @@ function cloudPanel(){
         <div class="field"><label for="au-email">Mejl</label><input id="au-email" type="email" autocomplete="username" required></div>
         <div class="field"><label for="au-pass">Lozinka</label><input id="au-pass" type="password" autocomplete="${up?"new-password":"current-password"}" minlength="6" required></div>
         <button class="btn" type="submit">${up?"Napravi nalog":"Prijavi se"}</button></form>
-      <div class="toolbar" style="margin-top:10px"><button class="link" data-authmode="${up?"login":"signup"}">${up?"Već imate nalog? Prijava":"Nemate nalog? Napravite ga"}</button></div>`);
+      <div class="toolbar" style="margin-top:10px"><button class="link" data-authmode="${up?"login":"signup"}">${up?"Već imate nalog? Prijava":"Nemate nalog? Napravite ga"}</button>${up?"":`<button class="link" data-authmode="reset">Zaboravili ste lozinku?</button>`}</div>`);
   }
   if (!cloud.firma) return panel("Zajednička baza", `<p class="note" style="margin-top:0">Prijavljeni ste kao <b>${esc(cloud.user.email)}</b>.</p>
     <div class="grid2">
@@ -1741,7 +1781,9 @@ function cloudPanel(){
   const lokSel = (id, v) => `<select id="${id}">${s.lokali.map((n,i)=>`<option value="${i}" ${String(v)===String(i)?"selected":""}>${esc(n)}</option>`).join("")}</select>`;
   return panel("Zajednička baza", `
     <div class="toolbar"><span class="pill c-green">Povezano</span><span><b>${esc(cloud.naziv)}</b> · ${esc(cloud.user.email)} · ${ROLE[cloud.uloga]}${myLokal()!=null?" · "+esc(s.lokali[myLokal()]):""}</span>
+      <button class="btn ghost small" data-pwopen>${ui.pwOpen?"Otkaži":"Promeni lozinku"}</button>
       ${ui.confirm==="signout"?`<span class="confirm">Odjava briše podatke firme sa ovog telefona (ostaju u bazi). <button class="btn danger small" data-signout>Odjavi se</button><button class="btn ghost small" data-cancel>Ne</button></span>`:`<button class="btn ghost small" data-askdel="signout">Odjavi se</button>`}</div>
+    ${ui.pwOpen?`<div style="margin-top:12px">${newPassForm}</div>`:""}
     ${queue.length?`<p class="note">Čeka slanje: ${queue.length} izmena${navigator.onLine?"":" (nema interneta)"}.</p>`:""}
     ${cloud.status==="error"&&cloud.msg?`<p class="note neg">Greška: ${esc(cloud.msg)}</p>`:""}
     ${owner?`<div class="sec-title" style="margin-top:14px">Korisnici</div>
@@ -1749,7 +1791,10 @@ function cloudPanel(){
         return `<tr><td><b>${esc(m.ime||"—")}</b></td><td class="mut">${esc(m.email)}</td>
           <td>${me||m.uloga==="vlasnik"?ROLE[m.uloga]:`<select class="pillsel c-blue" data-mrole="${m.korisnik}"><option value="menadzer" ${m.uloga==="menadzer"?"selected":""}>Menadžer</option><option value="smena" ${m.uloga==="smena"?"selected":""}>Smena</option></select>`}</td>
           <td>${m.uloga==="smena"?`<select class="pillsel c-purple" data-mlokal="${m.korisnik}">${s.lokali.map((n,i)=>`<option value="${i}" ${m.lokal===i?"selected":""}>${esc(n)}</option>`).join("")}</select>`:"svi"}</td>
-          <td class="r">${me||m.uloga==="vlasnik"?"":(ui.confirm==="clan:"+m.korisnik?`<span class="confirm"><button class="btn danger small" data-mdel="${m.korisnik}">Ukloni</button><button class="btn ghost small" data-cancel>Ne</button></span>`:`<button class="x" data-askdel="clan:${m.korisnik}" aria-label="Ukloni korisnika">×</button>`)}</td></tr>`; }), "Učitavanje…")}
+          <td class="r">${me||m.uloga==="vlasnik"?"":ui.confirm==="pw:"+m.korisnik
+            ?`<form class="confirm" data-mpass="${m.korisnik}"><input id="mp-${m.korisnik}" type="text" autocomplete="off" minlength="6" placeholder="nova lozinka" style="width:140px" required><button class="btn small" type="submit">Postavi</button><button class="btn ghost small" type="button" data-cancel>Ne</button></form>`
+            :ui.confirm==="clan:"+m.korisnik?`<span class="confirm"><button class="btn danger small" data-mdel="${m.korisnik}">Ukloni</button><button class="btn ghost small" data-cancel>Ne</button></span>`
+            :`<button class="btn ghost small" data-askdel="pw:${m.korisnik}">Lozinka</button> <button class="x" data-askdel="clan:${m.korisnik}" aria-label="Ukloni korisnika">×</button>`}</td></tr>`; }), "Učitavanje…")}
       <div class="sec-title" style="margin-top:14px">Nova pozivnica</div>
       <form class="entry" id="f-poziv">
         <div class="field"><label for="po-ime">Ime radnika</label><input id="po-ime" placeholder="npr. Ana" required></div>
@@ -1974,6 +2019,7 @@ document.addEventListener("click", e=>{
   if (b.dataset.delrad){ const id=b.dataset.delrad; ui.confirm=null; removeWithUndo([["radnici", x=>x.id===id]], "Radnik obrisan"); return; }
   if (b.hasAttribute("data-undo")){ undoDelete(); return; }
   if (b.dataset.authmode){ cloud.mode=b.dataset.authmode; render(); return; }
+  if (b.hasAttribute("data-pwopen")){ ui.pwOpen=!ui.pwOpen; render(); return; }
   if (b.hasAttribute("data-signout")){ ui.confirm=null; signOut(); return; }
   if (b.dataset.mdel){ const k=b.dataset.mdel; ui.confirm=null;
     cloud.sb.from("clanovi").delete().eq("firma",cloud.firma).eq("korisnik",k).then(({error})=>{ toast(error?"Nije uklonjen: "+error.message:"Korisnik uklonjen"); loadMembers(); }); return; }
@@ -2094,6 +2140,9 @@ document.addEventListener("submit", async e=>{
   else if (f.id==="f-auth"){ const btn=f.querySelector("button"); btn.disabled=true;
     try{ if (cloud.mode==="signup") await signUp(val("au-email"), $("#au-pass").value, val("au-ime")); else await signIn(val("au-email"), $("#au-pass").value); }
     finally{ if (btn.isConnected) btn.disabled=false; } }
+  else if (f.id==="f-reset"){ f.querySelector("button").disabled=true; await sendReset(val("rs-email")); }
+  else if (f.id==="f-newpass"){ await setNewPassword($("#np-1").value, $("#np-2").value); }
+  else if (f.dataset.mpass){ await setMemberPassword(f.dataset.mpass, val("mp-"+f.dataset.mpass)); }
   else if (f.id==="f-firma"){ f.querySelector("button").disabled=true; await createFirm(val("fi-naziv")); }
   else if (f.id==="f-join"){ f.querySelector("button").disabled=true; await joinFirm(val("jo-kod"), val("jo-ime")); render(); }
   else if (f.id==="f-poziv"){ const uloga=val("po-uloga");
